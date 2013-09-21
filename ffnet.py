@@ -1,25 +1,23 @@
-#!/usr/bin/python3
+# This is the site module for FF.net, and the model for other site modules. It
+# handles only FF.net-specific tasks; the API provided includes
+# download_metadata, compile_story, and download_list. The functions can be
+# called on their own, but it's probably friendlier to use the runner in
+# __main__ or the update functions in mirror.
 
-# API docs
-# Download-story functions
-# Take an ID; URL parsing is out-of-scope
-# Write to a provided file-like object; opening is out-of-scope
-# Take formatting options; a bit ugly, but can't think of a better option
-# Get-metadata functions
-# Also deals with table of contents
-# Parse-author functions
-
-import urllib.request, urllib.error, re
+import urllib.request, urllib.error, re, shlex
+import http.cookiejar
 from bs4 import BeautifulSoup
 
 from ffmirror.util import *
 
 hostname = "www.fanfiction.net"
-story_url = "http://{hostname}/s/{number}/{chapter}/"
-user_url = "http://{hostname}/u/{number}/"
+story_url = "http://www.fanfiction.net/s/{number}/{chapter}/"
+user_url = "http://www.fanfiction.net/u/{number}/"
 
 story_url_re = re.compile(r"https?://[^/]+/s/(?P<number>\d+)/?(?P<chapter>\d+)?/?")
 user_url_re = re.compile(r"https?://[^/]+/u/(?P<number>\d+)/?")
+
+# Functions related to downloading stories
 
 def get_contents(soup):
     """Given a BeautifulSoup of a story page, extract the contents list and
@@ -110,7 +108,7 @@ def download_metadata(number):
     download all its individual chapters.
 
     """
-    url = story_url.format(hostname=hostname, number=number, chapter=1)
+    url = story_url.format(number=number, chapter=1)
     r = urlopen_retry(url)
     data = r.read()
     soup = BeautifulSoup(data)
@@ -119,6 +117,13 @@ def download_metadata(number):
     return md, toc
 
 def compile_story(md, toc, outfile, headers=True, contents=False, kindle=False, callback=None, **kwargs):
+    """Given the output of download_metadata, download all chapters of a story and
+    write them to outfile. Extra keyword arguments are ignored in order to
+    facilitate calls. callback is called as each chapter is downloaded with the
+    chapter index and title; this should be a quick function to print progress
+    output or similar.
+
+    """
     outfile.write("""<html>
 <head>
 <meta charset="UTF-8">
@@ -138,7 +143,7 @@ body {{ font-family: sans-serif }}
         outfile.write(make_toc(toc))
     for n, t in enumerate(toc):
         x = n + 1
-        url = story_url.format(hostname=hostname, number=md['id'], chapter=x)
+        url = story_url.format(number=md['id'], chapter=x)
         if callback: # For printing progress as it runs.
             callback(n,t)
         r = urlopen_retry(url)
@@ -151,3 +156,64 @@ body {{ font-family: sans-serif }}
         text = fold_string_indiscriminately(text)
         outfile.write(text + "\n\n")
     outfile.write("</body>\n</html>\n")
+
+# Functions related to dealing with user listings
+
+def parse_entry(ent):
+    """Takes the Javascript function in the page source that populates
+    the story entry, and extracts various relevant information from
+    it. Returns a dictionary."""
+    o = re.match(r"story_set\((.+)\);", ent)
+    if not o:
+        raise Exception("Invalid entry {}".format(ent))
+    d = o.group(1) # This is the stuff inside the parentheses
+    s = shlex.shlex(d, posix=True) # Parse by tokens, respecting quoted strings
+    s.whitespace += ',' # Split on commas
+    s.escapedquotes += "'" # Respect escaped apostrophes inside single-quoted strings
+    l = list(s)
+    item = {}
+    item['title'] = l[1]
+    item['summary'] = l[3].replace('\\"', '"') # For some reason, the JS strings escape double quotes even in single-quoted strings. 
+    item['category'] = l[7]
+    item['id'] = int(l[8])
+    item['published'] = int(l[11])
+    item['updated'] = int(l[14])
+    item['reviews'] = int(l[17])
+    item['chapters'] = int(l[18])
+    item['words'] = int(l[21])
+    item['characters'] = l[25]
+    if l[0] == 'fs_array':
+        item['source'] = 'favorites'
+        item['author'] = l[5]
+        item['authorid'] = int(l[4])
+    elif l[0] == 'st_array':
+        item['source'] = 'authored'
+        item['author'] = ''
+        item['authorid'] = 0
+    item['site'] = 'ffnet'
+    return item
+
+def download_list(number):
+    """Given a user ID, download lists of the stories they've written and favorited
+    and return them. The lists are returned as a tuple of (authored, faved).
+    Each entry is a dictionary containing metadata.
+
+    """
+    url = user_url.format(number=number)
+    r = urlopen_retry(url)
+    page = r.read().decode()
+    o = re.search(r"<title>(.+) \| FanFiction</title>", page)
+    if not o:
+        raise Exception("Couldn't find author name for {}".format(number))
+    aname = o.group(1)
+    l = [parse_entry(i) for i in re.findall(r"story_set\(.+?\);", page)]
+    ra = []
+    rf = []
+    for i in l:
+        if i['source'] == 'authored':
+            i['author'] = aname
+            i['authorid'] = number
+            ra.append(i)
+        elif i['source'] == 'favorites':
+            rf.append(i)
+    return ra, rf

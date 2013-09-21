@@ -51,3 +51,9 @@ def urlopen_retry(url, tries=3, delay=1):
         else:
             return r
         
+def unsilly_import(name):
+    mod = __import__(name) # For dotted imports, this _imports_ the module you want, but _returns_ the top-level package.
+    for i in name.split('.')[1:]:
+        mod = getattr(mod, i)
+    return mod
+
