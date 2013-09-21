@@ -53,7 +53,7 @@ def download_story(url, **kwargs):
         if not kwargs['silent']: print("", end='\n')
 
 def run_dl():
-    ap = argparse.ArgumentParser(description=progdesc)
+    ap = argparse.ArgumentParser(description="Download a single story as a plain file")
     ap.add_argument("-s", "--silent", action="store_true", help="Suppress running output", default=False)
     g = ap.add_mutually_exclusive_group()
     ap.add_argument("-o", "--outfile", help="The file to output to", default="")
@@ -90,7 +90,7 @@ def download_list(url, ls=False, silent=False, getall=False, **kwargs):
     mirror.update_list(nsl, callback=progress)
 
 def run_add():
-    ap = argparse.ArgumentParser(description=progdesc)
+    ap = argparse.ArgumentParser(description="Add an author's corpus or favorites to a mirror, or update them")
     ap.add_argument("-s", "--silent", action="store_true", help="Suppress running output", default=False)
     ap.add_argument("-f", "--favorites", dest='ls', action="store_true", default=False, help="Get author's favorites rather than their corpus")
     ap.add_argument("-a", "--all", dest='getall', action="store_true", default=False, help="Download all stories without checking if already present")
@@ -99,7 +99,7 @@ def run_add():
     download_list(**args.__dict__)
 
 def update_mirror(silent=False):
-    m = mirror.get_index()
+    m = mirror.read_entries()
     for n,i in enumerate(sorted(m.keys())):
         if not silent: print("Author '{}' (#{}/{})".format(m[i][0]['author'], n+1, len(m)))
         mod = util.unsilly_import("ffmirror." + m[i][0]['site'])
@@ -107,7 +107,7 @@ def update_mirror(silent=False):
         download_list(url, silent=silent)
 
 def run_update():
-    ap = argparse.ArgumentParser(description=progdesc)
+    ap = argparse.ArgumentParser(description="Update an entire mirror from the Web site")
     ap.add_argument("-s", "--silent", action="store_true", help="Suppress running output", default=False)
     args = ap.parse_args()
     update_mirror(**args.__dict__)
