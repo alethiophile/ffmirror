@@ -1,0 +1,17 @@
+This package is designed to deal with downloading stories from FF.net and,
+later, other sites. It requires a fairly recent Python (tested under 3.3.1).
+
+To use, place the ffmirror directory somewhere within the Python load path. Then
+place symlinks to the file __main__.py, in PATH or in the directory in which
+they will be run, named after the keys of the actions directory in that file
+('ffup', 'ffdl', 'ffadd', 'ffcache'). Running each symlink will activate the
+appropriate function of __main__.py. The other modules can be used in other
+applications for library functionality.
+
+ffdl is a simple one-story downloader. ffadd, ffup and ffcache all deal with an
+offline mirror; the location of that mirror is taken to be the current working
+directory where the files are run. ffadd will add an author's corpus or
+favorites to the current mirror. ffup will update an entire mirror by checking
+all authors in it. ffcache will create an index cache file (index.db) required
+for using CGI scripts to browse the mirror. The options are all documented by
+the usual --help invocation of each command.
