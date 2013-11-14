@@ -11,8 +11,6 @@ import ffmirror.util as util
 import ffmirror.mirror as mirror
 import ffmirror.server as server
 
-progdesc = "A story downloader and formatter for multiple fanfiction sites"
-
 urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')) ]
 
 def parse_url(url):
