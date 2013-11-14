@@ -9,7 +9,7 @@
 
 import re, os, pickle
 import ffmirror.util as util
-from simpletags import read_tags, write_tags
+from ffmirror.simpletags import read_tags, write_tags
 
 # A dictionary mapping FFnet's idea of category to a tag name I can
 # use for my system. The default is to simply lowercase the category
