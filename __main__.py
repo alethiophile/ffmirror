@@ -26,7 +26,12 @@ def parse_url(url):
             return mod
 
 def download_story(url, **kwargs):
-    mod = parse_url(url)
+    if kwargs['update']:
+        o = mirror.read_from_file(url)
+        mod = util.unsilly_import('ffmirror.' + o['site'])
+        url = mod.story_url.format(number=o['id'], chapter=1)
+    else:
+        mod = parse_url(url)
     sid = mod.story_url_re.match(url).group('number')
     md, toc = mod.download_metadata(sid)
     if not kwargs['silent']: print("Found story {}, {} chapters".format(md['title'], md['chapters']))
@@ -61,7 +66,8 @@ def run_dl():
     g.add_argument("--no-headers", action="store_false", help="Suppress chapter headers", default=True, dest='headers')
     ap.add_argument("-k", "--kindle", action="store_true", help="Format output for a Kindle", default=False)
     ap.add_argument("-d", "--dry-run", action="store_true", help="Dry run (no download, just parse metadata)", default=False)
-    ap.add_argument("url", help="A URL for a chapter of the fic")
+    ap.add_argument("-u", "--update", action="store_true", help="Update an existing file", default=False)
+    ap.add_argument("url", help="A URL for a chapter of the fic, or (with -u) filename for update", default=None)
     args = ap.parse_args()
     download_story(**args.__dict__)
 
@@ -75,6 +81,10 @@ def download_list(url, ls=False, silent=False, getall=False, **kwargs):
     else:
         nsl = sl
     if not silent: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
+    if kwargs['dry_run']:
+        for i in nsl:
+            print(i)
+        return
     mirror.update_tags(nsl)
     lsl = 0
     def progress(i, n):
@@ -94,6 +104,7 @@ def run_add():
     ap.add_argument("-s", "--silent", action="store_true", help="Suppress running output", default=False)
     ap.add_argument("-f", "--favorites", dest='ls', action="store_true", default=False, help="Get author's favorites rather than their corpus")
     ap.add_argument("-a", "--all", dest='getall', action="store_true", default=False, help="Download all stories without checking if already present")
+    ap.add_argument("-d", "--dry-run", action="store_true", default=False, help="Dry run (only parse list and print)")
     ap.add_argument("url", help="A URL for an author's profile")
     args = ap.parse_args()
     download_list(**args.__dict__)

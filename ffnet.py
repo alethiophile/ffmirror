@@ -22,13 +22,12 @@ user_url_re = re.compile(r"https?://[^/]+/u/(?P<number>\d+)/?")
 def get_contents(soup):
     """Given a BeautifulSoup of a story page, extract the contents list and
     return list of chapter titles."""
-    e = soup.find("table", cellpadding="5")
-    se = e.find("select")
+    se = soup.find("select", id="chap_select")
     if se == None:
         return ['Chapter 1'] # it's a oneshot, so no chapter list
     rv = []
     for oe in se.find_all('option'):
-        val = re.match(r"\d+. (.+)", oe.string).group(1)
+        val = re.match(r"\d+. (.*)", oe.string).group(1)
         rv.append(val)
     return rv
 
@@ -54,20 +53,22 @@ def get_storytext(d):
     return d
 
 def get_metadata(soup):
-    """Given a BeautifulSoup of an FFnet page, extract a metadata
-    entry. Somewhat abbreviated from what download_list returns, since it's
-    parsing rendered HTML rather than JS, and some information is lost."""
-    e = soup.find("table", cellpadding="5")
-    td = e.find("td")
-    title = td.find("b").string
-    ae = td.find("a")
+    """Given a BeautifulSoup of an FFnet page, extract a metadata entry. Somewhat
+    abbreviated from what download_list returns, since it's parsing rendered
+    HTML rather than JS, and some information is lost. This function need change
+    often to handle FFnet's constant dumb alterations; I wish they'd provide an API.
+
+    """
+    e = soup.find("div", id="profile_top")
+    title = e.find("b").string
+    ae = e.find("a")
     author = ae.string
     authorid = re.match(r"/u/(\d+)/.*", ae['href']).group(1)
-    sd = td.find("div", class_='xcontrast_txt')
+    sd = e.find("div", class_='xcontrast_txt')
     summary = sd.string
     md = sd.find_next_sibling("span", class_='xcontrast_txt')
     s = md.a.next_sibling
-    o = re.match(r"[ -]+\w+[ -]+([\w/]+ - )?((?P<chars>(?!Chapters).*?\S) +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
+    o = re.match(r"[ -]+\w+[ -]+([\w/]+ - )?(\[?(?P<chars>(?!Chapters).*?\S)\]? +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
     characters = o.group('chars')
     if characters == None:
         characters = ""
@@ -83,13 +84,18 @@ def get_metadata(soup):
     else:
         reviews = int(ae.string.replace(",", ""))
         ids = ae.next_sibling
+    ids = md.get_text()
     sid = re.match(r".*id: (\d+).*", ids).group(1)
+    ud = md.find("span")
+    updated = int(ud['data-xutime'])
+    pd = ud.find_next("span")
+    published = int(pd['data-xutime'])
     e = soup.find("div", id='pre_story_links')
     try:
         category = e.a.find_next_sibling('a').string
     except AttributeError:
         category = 'crossover'
-    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 'source': 'story', 'author': author, 'authorid': authorid, 'site': 'ffnet'}
+    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 'source': 'story', 'author': author, 'authorid': authorid, 'site': 'ffnet', 'updated': updated, 'published': published}
 
 def make_toc(contents):
     """Makes an HTML string table of contents to be concatenated into outstr, given the return value
@@ -121,7 +127,7 @@ def compile_story(md, toc, outfile, headers=True, contents=False, kindle=False, 
     write them to outfile. Extra keyword arguments are ignored in order to
     facilitate calls. callback is called as each chapter is downloaded with the
     chapter index and title; this should be a quick function to print progress
-    output or similar.
+    output or similar, since its completion blocks continuing the download.
 
     """
     outfile.write("""<html>
