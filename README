@@ -1,12 +1,17 @@
 This package is designed to deal with downloading stories from FF.net and,
-later, other sites. It requires a fairly recent Python (tested under 3.3.1).
+later, other sites. Dependencies:
 
-To use, place the ffmirror directory somewhere within the Python load path. Then
-place symlinks to the file __main__.py, in PATH or in the directory in which
-they will be run, named after the keys of the actions directory in that file
-('ffup', 'ffdl', 'ffadd', 'ffcache'). Running each symlink will activate the
-appropriate function of __main__.py. The other modules can be used in other
-applications for library functionality.
+ - Python 3 (tested under 3.3.2)
+ - BeautifulSoup version 4
+ - html5lib
+
+To install, place the ffmirror directory somewhere that's included in
+PYTHONPATH. After that, you can run it by any of the following means:
+
+ - Run 'python3 -m ffmirror <modulename>'
+ - Run the __main__.py file directly, giving <modulename> as first argument
+ - Create symlinks to __main__.py somewhere in PATH, named after the module
+   names; run the correct symlink for each module
 
 ffdl is a simple one-story downloader. ffadd, ffup and ffcache all deal with an
 offline mirror; the location of that mirror is taken to be the current working
