@@ -11,8 +11,8 @@ from bs4 import BeautifulSoup
 from ffmirror.util import *
 
 hostname = "www.fanfiction.net"
-story_url = "http://www.fanfiction.net/s/{number}/{chapter}/"
-user_url = "http://www.fanfiction.net/u/{number}/"
+story_url = "https://www.fanfiction.net/s/{number}/{chapter}/"
+user_url = "https://www.fanfiction.net/u/{number}/"
 
 story_url_re = re.compile(r"https?://[^/]+/s/(?P<number>\d+)/?(?P<chapter>\d+)?/?")
 user_url_re = re.compile(r"https?://[^/]+/u/(?P<number>\d+)/?")
@@ -86,10 +86,14 @@ def get_metadata(soup):
         ids = ae.next_sibling
     ids = md.get_text()
     sid = re.match(r".*id: (\d+).*", ids).group(1)
-    ud = md.find("span")
-    updated = int(ud['data-xutime'])
-    pd = ud.find_next("span")
-    published = int(pd['data-xutime'])
+    ud = md.find("span", attrs={"data-xutime": True})
+    if ud.previous_sibling.endswith("Updated: "):
+        updated = int(ud['data-xutime'])
+        pd = ud.find_next_sibling("span", attrs={"data-xutime": True})
+        published = int(pd['data-xutime'])
+    elif ud.previous_sibling.endswith("Published: "):
+        published = int(ud['data-xutime'])
+        updated = published
     e = soup.find("div", id='pre_story_links')
     try:
         category = e.a.find_next_sibling('a').string
