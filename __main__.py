@@ -69,7 +69,7 @@ def run_dl():
     args = ap.parse_args()
     download_story(**args.__dict__)
 
-def download_list(url, ls=False, silent=False, getall=False, **kwargs):
+def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kwargs):
     mod = parse_url(url)
     uid = mod.user_url_re.match(url).group('number')
     auth, fav = mod.download_list(uid)
@@ -79,7 +79,7 @@ def download_list(url, ls=False, silent=False, getall=False, **kwargs):
     else:
         nsl = sl
     if not silent: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
-    if kwargs['dry_run']:
+    if dry_run:
         for i in nsl:
             print(i)
         return
