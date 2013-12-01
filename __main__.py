@@ -9,7 +9,6 @@
 import re, sys, argparse, os
 import ffmirror.util as util
 import ffmirror.mirror as mirror
-import ffmirror.server as server
 
 urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')) ]
 
