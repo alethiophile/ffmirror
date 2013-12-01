@@ -7,6 +7,7 @@
 import urllib.request, urllib.error, re, shlex
 import http.cookiejar
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from ffmirror.util import *
 
@@ -169,39 +170,40 @@ body {{ font-family: sans-serif }}
 
 # Functions related to dealing with user listings
 
-def parse_entry(ent):
-    """Takes the Javascript function in the page source that populates
-    the story entry, and extracts various relevant information from
-    it. Returns a dictionary."""
-    o = re.match(r"story_set\((.+)\);", ent)
-    if not o:
-        raise Exception("Invalid entry {}".format(ent))
-    d = o.group(1) # This is the stuff inside the parentheses
-    s = shlex.shlex(d, posix=True) # Parse by tokens, respecting quoted strings
-    s.whitespace += ',' # Split on commas
-    s.escapedquotes += "'" # Respect escaped apostrophes inside single-quoted strings
-    l = list(s)
-    item = {}
-    item['title'] = l[1]
-    item['summary'] = l[3].replace('\\"', '"') # For some reason, the JS strings escape double quotes even in single-quoted strings. 
-    item['category'] = l[7]
-    item['id'] = int(l[8])
-    item['published'] = int(l[11])
-    item['updated'] = int(l[14])
-    item['reviews'] = int(l[17])
-    item['chapters'] = int(l[18])
-    item['words'] = int(l[21])
-    item['characters'] = l[25]
-    if l[0] == 'fs_array':
-        item['source'] = 'favorites'
-        item['author'] = l[5]
-        item['authorid'] = int(l[4])
-    elif l[0] == 'st_array':
-        item['source'] = 'authored'
-        item['author'] = ''
-        item['authorid'] = 0
-    item['site'] = 'ffnet'
-    return item
+def parse_entry(elem):
+    """Given a BeautifulSoup element for a story listing, return a metadata object for the story."""
+    title = elem['data-title']
+    category = elem['data-category']
+    sid = int(elem['data-storyid'])
+    published = int(elem['data-datesubmit'])
+    updated = int(elem['data-dateupdate'])
+    reviews = int(elem['data-ratingtimes'])
+    chapters = int(elem['data-chapters'])
+    words = int(elem['data-wordcount'])
+    sd = elem.find('div')
+    summary = sd.contents[0]
+    sd = sd.find('div')
+    cs = sd.contents[-1]
+    if type(cs) == Tag:
+        chars = ''
+    else:
+        o = re.match(r"\s*-\s*(.+?)\s*(-.*)?$", cs)
+        chars = o.group(1)
+    if chars == 'Complete':
+        chars = ''
+    complete = elem['data-statusid'] == '2'
+    source = 'favorites' if 'favstories' in elem['class'] else 'authored'
+    if source == 'favorites':
+        al = elem.find('a', href=re.compile(r"^/u/.*"))
+        author = al.string
+        o = re.match(r"^/u/(\d+)/.*", al['href'])
+        authorid = int(o.group(1))
+    else: # in this case, the caller populates those fields
+        author = ''
+        authorid = 0 
+    return {'title': title, 'category': category, 'id': sid, 'published': published, 'updated': updated, 
+            'reviews': reviews, 'chapters': chapters, 'words': words, 'summary': summary, 'characters': chars, 
+            'complete': complete, 'source': source, 'author': author, 'authorid': authorid, 'site': 'ffnet'}
 
 def download_list(number):
     """Given a user ID, download lists of the stories they've written and favorited
@@ -212,18 +214,16 @@ def download_list(number):
     url = user_url.format(number=number)
     r = urlopen_retry(url)
     page = r.read().decode()
-    o = re.search(r"<title>(.+) \| FanFiction</title>", page)
-    if not o:
-        raise Exception("Couldn't find author name for {}".format(number))
-    aname = o.group(1)
-    l = [parse_entry(i) for i in re.findall(r"story_set\(.+?\);", page)]
-    ra = []
-    rf = []
-    for i in l:
-        if i['source'] == 'authored':
-            i['author'] = aname
-            i['authorid'] = number
-            ra.append(i)
-        elif i['source'] == 'favorites':
-            rf.append(i)
-    return ra, rf
+    soup = BeautifulSoup(page)
+    author = soup.find('div', id='content_wrapper_inner').span.string.strip()
+    auth = []
+    fav = []
+    for i in soup.find_all('div', class_='z-list'):
+        a = parse_entry(i)
+        if a['source'] == 'favorites':
+            fav.append(a)
+        elif a['source'] == 'authored':
+            a['author'] = author
+            a['authorid'] = int(number)
+            auth.append(a)
+    return auth, fav
