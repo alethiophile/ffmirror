@@ -161,7 +161,7 @@ body {{ font-family: sans-serif }}
         data = r.read().decode()
         text = get_storytext(data)
         if headers:
-            outfile.write("""<h2 id="ch{}">{}</h2>\n""".format(x, t))
+            outfile.write("""<h2 id="ch{}" class="chapter">{}</h2>\n""".format(x, t))
         if kindle:
             text = re.sub(r'\<hr[^>]+\>', '<p>* * *</p>', text)
         text = fold_string_indiscriminately(text)

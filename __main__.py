@@ -25,6 +25,7 @@ def parse_url(url):
 def download_story(url, **kwargs):
     if kwargs['update']:
         o = mirror.read_from_file(url)
+        ufn = url
         mod = util.unsilly_import('ffmirror.' + o['site'])
         url = mod.story_url.format(number=o['id'], chapter=1)
     else:
@@ -32,6 +33,10 @@ def download_story(url, **kwargs):
     sid = mod.story_url_re.match(url).group('number')
     md, toc = mod.download_metadata(sid)
     if not kwargs['silent']: print("Found story {}, {} chapters".format(md['title'], md['chapters']))
+    if kwargs['update']:
+        if not mirror.check_update(md, ufn):
+            if not kwargs['silent']: print("Nothing to do (up to date)")
+            return
     if kwargs['dry_run']:
         print('\nMetadata:')
         for i in md:
@@ -61,7 +66,7 @@ def run_dl():
     ap.add_argument("-o", "--outfile", help="The file to output to", default="")
     g.add_argument("-c", "--contents", action="store_true", help="Generate a table of contents", default=False)
     g.add_argument("--no-headers", action="store_false", help="Suppress chapter headers", default=True, dest='headers')
-    ap.add_argument("-k", "--kindle", action="store_true", help="Format output for a Kindle", default=False)
+    ap.add_argument("-k", "--kindle", action="store_true", help="Format output for a Kindle (now deprecated, use ebook-convert)", default=False)
     ap.add_argument("-d", "--dry-run", action="store_true", help="Dry run (no download, just parse metadata)", default=False)
     ap.add_argument("-u", "--update", action="store_true", help="Update an existing file", default=False)
     ap.add_argument("url", help="A URL for a chapter of the fic, or (with -u) filename for update", default=None)

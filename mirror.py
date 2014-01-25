@@ -75,14 +75,15 @@ def read_from_file(name):
         return None
     return rv
 
-def check_update(r):
+def check_update(r, n=None):
     """Check a downloaded metadata entry r against local files. Return
     true if this entry needs redownloading. Because some people
     (*cough*NeonZangetsu*cough*) can't pick unique titles for their
     stories, also return false if IDs are not the same. This means you
     miss one story or the other, but people who write multiple stories
     under the same title deserve what they get."""
-    n = story_file(r)
+    if n is None:
+        n = story_file(r)
     cr = read_from_file(n)
     if cr == None:
         return True
