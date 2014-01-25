@@ -31,3 +31,8 @@ favorites to the current mirror. ffup will update an entire mirror by checking
 all authors in it. ffcache will create an index cache file (index.db) required
 for using CGI scripts to browse the mirror. The options are all documented by
 the usual --help invocation of each command.
+
+In addition to its local mirroring functionality, ffmirror can be used alongside
+calibre's ebook-convert to easily maintain a library of fanfiction on a Kindle
+or other ebook reader. The file Makefile.sample in this directory provides an
+example for use with Kindle.
