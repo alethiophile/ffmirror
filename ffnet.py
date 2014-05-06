@@ -69,7 +69,7 @@ def get_metadata(soup):
     summary = sd.string
     md = sd.find_next_sibling("span", class_='xcontrast_txt')
     s = md.a.next_sibling
-    o = re.match(r"[ -]+\w+[ -]+([\w/]+ - )?(\[?(?P<chars>(?!Chapters).*?\S)\]? +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
+    o = re.match(r"[ -]+\w+[ -]+([\w/]+ - )?((?P<chars>(?!Chapters).*?\S) +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
     characters = o.group('chars')
     if characters == None:
         characters = ""
@@ -86,7 +86,7 @@ def get_metadata(soup):
         reviews = int(ae.string.replace(",", ""))
         ids = ae.next_sibling
     ids = md.get_text()
-    sid = re.match(r".*id: (\d+).*", ids).group(1)
+    sid = int(re.match(r".*id: (\d+).*", ids).group(1))
     ud = md.find("span", attrs={"data-xutime": True})
     if ud.previous_sibling.endswith("Updated: "):
         updated = int(ud['data-xutime'])
@@ -95,12 +95,13 @@ def get_metadata(soup):
     elif ud.previous_sibling.endswith("Published: "):
         published = int(ud['data-xutime'])
         updated = published
+    complete = 'Status: Complete' in md.get_text()
     e = soup.find("div", id='pre_story_links')
     try:
         category = e.a.find_next_sibling('a').string
     except AttributeError:
         category = 'crossover'
-    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 'source': 'story', 'author': author, 'authorid': authorid, 'site': 'ffnet', 'updated': updated, 'published': published}
+    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 'source': 'story', 'author': author, 'authorid': authorid, 'site': 'ffnet', 'updated': updated, 'published': published, 'complete': complete}
 
 def make_toc(contents):
     """Makes an HTML string table of contents to be concatenated into outstr, given the return value
@@ -145,7 +146,7 @@ body {{ font-family: sans-serif }}
 </head>
 <!-- Fic ID: {}
 """.format(md['title'], md['id']))
-    for k,v in md.items():
+    for k,v in sorted(md.items()):
         outfile.write("{}: {}\n".format(k,v))
     outfile.write("-->\n<body>\n")
     if headers:
@@ -172,8 +173,8 @@ body {{ font-family: sans-serif }}
 
 def parse_entry(elem):
     """Given a BeautifulSoup element for a story listing, return a metadata object for the story."""
-    title = elem['data-title']
-    category = elem['data-category']
+    title = elem['data-title'].replace("\\'", "'")
+    category = elem['data-category'].replace("\\'", "'")
     sid = int(elem['data-storyid'])
     published = int(elem['data-datesubmit'])
     updated = int(elem['data-dateupdate'])

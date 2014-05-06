@@ -33,10 +33,6 @@ def download_story(url, **kwargs):
     sid = mod.story_url_re.match(url).group('number')
     md, toc = mod.download_metadata(sid)
     if not kwargs['silent']: print("Found story {}, {} chapters".format(md['title'], md['chapters']))
-    if kwargs['update']:
-        if not mirror.check_update(md, ufn):
-            if not kwargs['silent']: print("Nothing to do (up to date)")
-            return
     if kwargs['dry_run']:
         print('\nMetadata:')
         for i in md:
@@ -45,6 +41,10 @@ def download_story(url, **kwargs):
         for i in toc:
             print(i)
         return
+    if kwargs['update']:
+        if not mirror.check_update(md, ufn):
+            if not kwargs['silent']: print("Nothing to do (up to date)")
+            return
     if kwargs['outfile']:
         fn = kwargs['outfile']
     else:
@@ -82,7 +82,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kw
         nsl = [i for i in sl if mirror.check_update(i)]
     else:
         nsl = sl
-    if not silent: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
+    if not silent and len(auth) > 0: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
     if dry_run:
         for i in nsl:
             print(i)

@@ -31,7 +31,7 @@ def make_story_html(md, tags=True, author=False):
     a += """{3}<br />
 Words: {4} — Chapters: {5} — Category: {6} — Characters: {7} — Published: {9} — Updated: {10}</li>
 """
-    return a.format(md['filename'], md['title'], ts, md['summary'], md['words'], md['chapters'], md['category'], md['characters'][3:], md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat())
+    return a.format(md['filename'], md['title'], ts, md['summary'], md['words'], md['chapters'], md['category'], md['characters'], md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat())
 
 def make_npls(page, last, tag=None):
     """Make HTML for next/previous links for the given page."""
