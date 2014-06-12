@@ -29,9 +29,14 @@ def make_story_html(md, tags=True, author=False):
     if tags: a += """<small><em>{2}</em></small><br />
 """
     a += """{3}<br />
-Words: {4} — Chapters: {5} — Category: {6} — Characters: {7} — Published: {9} — Updated: {10}</li>
+Words: {4} — Chapters: {5} — Category: {6} — {11}{7}Published: {9} — Updated: {10}</li>
 """
-    return a.format(md['filename'], md['title'], ts, md['summary'], md['words'], md['chapters'], md['category'], md['characters'], md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat())
+    if 'genre' in md and md['genre']:
+        gv = "{} — ".format(md['genre'])
+    else:
+        gv = ''
+    chars = "Characters: {} — ".format(md['characters']) if md['characters'] else ''
+    return a.format(md['filename'], md['title'], ts, md['summary'], md['words'], md['chapters'], md['category'], chars, md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat(), gv)
 
 def make_npls(page, last, tag=None):
     """Make HTML for next/previous links for the given page."""

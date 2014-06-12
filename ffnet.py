@@ -69,8 +69,9 @@ def get_metadata(soup):
     summary = sd.string
     md = sd.find_next_sibling("span", class_='xcontrast_txt')
     s = md.a.next_sibling
-    o = re.match(r"[ -]+\w+[ -]+([\w/]+ - )?((?P<chars>(?!Chapters).*?\S) +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
+    o = re.match(r"[ -]+\w+[ -]+((?P<genre>[\w/]+) - )?((?P<chars>(?!Chapters).*?\S) +- +)?(Chapters: (?P<chaps>\d+)[ -]+)?Words: (?P<words>[\d,]+).*", s)
     characters = o.group('chars')
+    genre = o.group('genre') or ''
     if characters == None:
         characters = ""
     try:
@@ -101,7 +102,10 @@ def get_metadata(soup):
         category = e.a.find_next_sibling('a').string
     except AttributeError:
         category = 'crossover'
-    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 'source': 'story', 'author': author, 'authorid': authorid, 'site': 'ffnet', 'updated': updated, 'published': published, 'complete': complete}
+    return {'title': title, 'summary': summary, 'category': category, 'id': sid, 
+            'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 
+            'source': 'story', 'author': author, 'authorid': authorid, 'genre': genre,
+            'site': 'ffnet', 'updated': updated, 'published': published, 'complete': complete}
 
 def make_toc(contents):
     """Makes an HTML string table of contents to be concatenated into outstr, given the return value
@@ -184,6 +188,10 @@ def parse_entry(elem):
     sd = elem.find('div')
     summary = sd.contents[0]
     sd = sd.find('div')
+    o = re.match(r"(Crossover - )?(?P<category>.+?) - Rated: (?P<rating>.{1,2}) - (?P<language>.+?) - (?P<genre>.+?) - ", sd.contents[0])
+    genre = o.group('genre')
+    if 'Chapters' in genre:
+        genre = ''
     cs = sd.contents[-1]
     if type(cs) == Tag:
         chars = ''
@@ -204,7 +212,8 @@ def parse_entry(elem):
         authorid = 0 
     return {'title': title, 'category': category, 'id': sid, 'published': published, 'updated': updated, 
             'reviews': reviews, 'chapters': chapters, 'words': words, 'summary': summary, 'characters': chars, 
-            'complete': complete, 'source': source, 'author': author, 'authorid': authorid, 'site': 'ffnet'}
+            'complete': complete, 'source': source, 'author': author, 'authorid': authorid, 'genre': genre, 
+            'site': 'ffnet'}
 
 def download_list(number):
     """Given a user ID, download lists of the stories they've written and favorited
