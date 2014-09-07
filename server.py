@@ -12,6 +12,13 @@ page_thres = 100
 def sort_authors(st):
     return sorted(iter(st.items()), key= lambda x: x[1][0]['author'].lower())
 
+def format_number(n):
+    if type(n) != str:
+        n = str(n)
+    if len(n) <= 3:
+        return n
+    return format_number(n[:-3]) + ',' + n[-3:]
+
 def make_story_html(md, tags=True, author=False):
     """Takes a story metadata entry, writes out an HTML <li> for it. If tags is
     true, include a line with the story tags. If author is true, include a line
@@ -36,7 +43,7 @@ Words: {4} — Chapters: {5} — Category: {6} — {11}{7}Published: {9} — Upd
     else:
         gv = ''
     chars = "Characters: {} — ".format(md['characters']) if md['characters'] else ''
-    return a.format(md['filename'], md['title'], ts, md['summary'], md['words'], md['chapters'], md['category'], chars, md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat(), gv)
+    return a.format(md['filename'], md['title'], ts, md['summary'], format_number(md['words']), md['chapters'], md['category'], chars, md['author'], datetime.fromtimestamp(int(md['published'])).date().isoformat(), datetime.fromtimestamp(int(md['updated'])).date().isoformat(), gv)
 
 def make_npls(page, last, tag=None):
     """Make HTML for next/previous links for the given page."""
