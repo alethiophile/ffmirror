@@ -12,11 +12,11 @@ from bs4.element import Tag
 from ffmirror.util import *
 
 hostname = "www.fanfiction.net"
-story_url = "https://www.fanfiction.net/s/{number}/{chapter}/"
-user_url = "https://www.fanfiction.net/u/{number}/"
+story_url = "https://{hostname}/s/{number}/{chapter}/"
+user_url = "https://{hostname}/u/{number}/"
 
-story_url_re = re.compile(r"https?://[^/]+/s/(?P<number>\d+)/?(?P<chapter>\d+)?/?")
-user_url_re = re.compile(r"https?://[^/]+/u/(?P<number>\d+)/?")
+story_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/s/(?P<number>\d+)/?(?P<chapter>\d+)?/?")
+user_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/u/(?P<number>\d+)/?")
 
 # Functions related to downloading stories
 
@@ -124,7 +124,7 @@ def download_metadata(number):
     download all its individual chapters.
 
     """
-    url = story_url.format(number=number, chapter=1)
+    url = story_url.format(hostname=hostname, number=number, chapter=1)
     r = urlopen_retry(url)
     data = r.read()
     soup = BeautifulSoup(data)
@@ -159,7 +159,7 @@ body {{ font-family: sans-serif }}
         outfile.write(make_toc(toc))
     for n, t in enumerate(toc):
         x = n + 1
-        url = story_url.format(number=md['id'], chapter=x)
+        url = story_url.format(hostname=hostname, number=md['id'], chapter=x)
         if callback: # For printing progress as it runs.
             callback(n,t)
         r = urlopen_retry(url)
@@ -221,7 +221,7 @@ def download_list(number):
     Each entry is a dictionary containing metadata.
 
     """
-    url = user_url.format(number=number)
+    url = user_url.format(hostname=hostname, number=number)
     r = urlopen_retry(url)
     page = r.read().decode()
     soup = BeautifulSoup(page)

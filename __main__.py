@@ -10,7 +10,8 @@ import re, sys, argparse, os
 import ffmirror.util as util
 import ffmirror.mirror as mirror
 
-urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')) ]
+urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')),
+           (re.compile("https?://www.fictionpress.com/.*"), util.unsilly_import('ffmirror.ffnet')) ]
 
 def parse_url(url):
     """Given a fanfiction URL (either story or author), this function will return
@@ -30,7 +31,9 @@ def download_story(url, **kwargs):
         url = mod.story_url.format(number=o['id'], chapter=1)
     else:
         mod = parse_url(url)
-    sid = mod.story_url_re.match(url).group('number')
+    o = mod.story_url_re.match(url)
+    sid = o.group('number')
+    mod.hostname = o.group('hostname')
     md, toc = mod.download_metadata(sid)
     if not kwargs['silent']: print("Found story {}, {} chapters".format(md['title'], md['chapters']))
     if kwargs['dry_run']:
