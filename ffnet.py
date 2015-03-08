@@ -142,14 +142,15 @@ def compile_story(md, toc, outfile, headers=True, contents=False, kindle=False, 
     """
     outfile.write("""<html>
 <head>
-<meta charset="UTF-8">
-<title>{}</title>
+<meta charset="UTF-8" />
+<meta name="Author" content="{author}" />
+<title>{title}</title>
 <style type="text/css">
 body {{ font-family: sans-serif }}
 </style>
 </head>
-<!-- Fic ID: {}
-""".format(md['title'], md['id']))
+<!-- Fic ID: {id}
+""".format(title=md['title'], id=md['id'], author=md['author']))
     for k,v in sorted(md.items()):
         outfile.write("{}: {}\n".format(k,v))
     outfile.write("-->\n<body>\n")
