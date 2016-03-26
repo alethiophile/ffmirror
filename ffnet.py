@@ -127,7 +127,7 @@ def download_metadata(number):
     url = story_url.format(hostname=hostname, number=number, chapter=1)
     r = urlopen_retry(url)
     data = r.read()
-    soup = BeautifulSoup(data)
+    soup = BeautifulSoup(data, 'html5lib')
     md = get_metadata(soup)
     toc = get_contents(soup)
     return md, toc
@@ -225,7 +225,7 @@ def download_list(number):
     url = user_url.format(hostname=hostname, number=number)
     r = urlopen_retry(url)
     page = r.read().decode()
-    soup = BeautifulSoup(page)
+    soup = BeautifulSoup(page, 'html5lib')
     author = soup.find('div', id='content_wrapper_inner').span.string.strip()
     auth = []
     fav = []
