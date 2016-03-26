@@ -11,32 +11,6 @@ import re, os, pickle, sys
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
 
-# A dictionary mapping FFnet's idea of category to a tag name I can
-# use for my system. The default is to simply lowercase the category
-# name and strip commas from it; entries shouldn't be added unless the
-# desired tag is different from that result.
-category_to_tag = { 'Avatar: Last Airbender': 'avatar',
-                    'Familiar of Zero': 'zero no tsukaima',
-                    'Dragon Ball Z': 'dbz',
-                    'Terminator: Sarah Connor Chronicles': 'sarah connor chronicles',
-                    'My Little Pony': 'mlp',
-                    'Warhammer': 'wh40k',
-                    'Oh My Goddess!': 'ah my goddess',
-                    'House, M.D.': 'house md',
-                    'Haruhi Suzumiya series': 'haruhi',
-                    'Higurashi/Umineko series': 'higurashi',
-                    'Rosario + Vampire': 'rosario to vampire',
-#                    'Negima! Magister Negi Magi/魔法先生ネギま！': 'negima',
-#                    'Puella Magi Madoka Magica/魔法少女まどか★マギカ': 'madoka',
-#                    "My Little Sister Can't Be This Cute/俺の妹がこんなに可愛いわけがない": 'ore no imouto',
-#                    'Toaru Majutsu no Index/とある魔術の禁書目録': 'toaru majutsu',
-#                    'Sword Art Online/ソードアート・オンライン': 'sao',
-#                    'Medaka Box/めだかボックス': 'medaka box',
-#                    'Bakemonogatari/化物語': 'bakemonogatari',
-#                    'Girls und Panzer/ガールズ&パンツァー': 'girls und panzer',
-#                    'Infinite Stratos/IS<インフィニット・ストラトス>': 'infinite stratos',
-                    }
-
 def story_file(md, with_id=False):
     if with_id:
         return os.path.join(util.make_filename(md['author']) + '-' + md['authorid'],
@@ -52,13 +26,9 @@ def cat_to_tagset(category):
     rv = set()
     cl = category.split(' & ')
     for i in cl:
-        try:
-            rv.add(category_to_tag[i])
-        except KeyError:
-            rv.add(i.lower().replace(",", "")) # If a thing isn't in the list, just use its name in lowercase as a default,
-                                               # stripping out commas which are special to the tagging system
+        # Tag name is category name, in lowercase, minus any commas
+        rv.add(i.lower().replace(",", ""))
     return rv
-
 
 def read_from_file(name):
     """Read a story metadata entry as returned by download_list out of
@@ -97,8 +67,9 @@ def read_from_file(name):
     return rv
 
 class FFMirror(object):
-    def __init__(self, mirror_dir):
+    def __init__(self, mirror_dir, use_ids=False):
         self.mirror_dir = mirror_dir
+        self.use_ids = use_ids
 
     def check_update(self, r, n=None):
         """Check a downloaded metadata entry r against local files. Return
@@ -108,12 +79,12 @@ class FFMirror(object):
         miss one story or the other, but people who write multiple stories
         under the same title deserve what they get."""
         if n is None:
-            n = os.path.join(self.mirror_dir, story_file(r))
+            n = os.path.join(self.mirror_dir, story_file(r, self.use_ids))
         cr = read_from_file(n)
         if cr == None:
             return True
         try:
-            if r['id'] != cr['id']:
+            if r['id'] != cr['id'] and not self.use_ids:
                 return False
             if r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or r['updated'] != cr['updated']:
                 return True
@@ -121,7 +92,7 @@ class FFMirror(object):
             return True
         return False
 
-    def update_list(self, sl, callback=None, id_tree=False):
+    def update_list(self, sl, callback=None):
         """This function takes a list of stories (as metadata entries) and downloads
         them all. The filenames used are the result of story_file. No checking of
         update requirement is done; for update-only, the caller should filter on the
@@ -139,7 +110,7 @@ class FFMirror(object):
                 print(i)
                 continue
             if callback: callback(n, (i, toc))
-            fn = os.path.join(self.mirror_dir, story_file(i, id_tree))
+            fn = os.path.join(self.mirror_dir, story_file(i, self.use_ids))
             os.makedirs(os.path.split(fn)[0], exist_ok=True)
             with open(fn, 'w') as out:
                 mod.compile_story(i, toc, out, contents=True, callback=callback)
@@ -156,7 +127,7 @@ class FFMirror(object):
         except FileNotFoundError:
             to = {}
         for i in sl:
-            fn = story_file(i)
+            fn = story_file(i, self.use_ids)
             ct = cat_to_tagset(i['category'])
             if fn in to:
                 to[fn].update(ct)
