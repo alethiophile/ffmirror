@@ -10,7 +10,7 @@ import re, sys, argparse, os
 import ffmirror.util as util
 import ffmirror.mirror as mirror
 
-cur_mirror = mirror.FFMirror('.')
+cur_mirror = mirror.FFMirror('.', use_ids=True)
 
 urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')),
            (re.compile("https?://www.fictionpress.com/.*"), util.unsilly_import('ffmirror.ffnet')) ]
@@ -30,7 +30,8 @@ def download_story(url, **kwargs):
         o = mirror.read_from_file(url)
         ufn = url
         mod = util.unsilly_import('ffmirror.' + o['site'])
-        url = mod.story_url.format(number=o['id'], chapter=1, hostname='www.fanfiction.net')
+        #url = mod.story_url.format(number=o['id'], chapter=1, hostname=mod.hostname)
+        url = mod.get_story_url(o)
     else:
         mod = parse_url(url)
     o = mod.story_url_re.match(url)
@@ -121,7 +122,8 @@ def update_mirror(silent=False):
     for n,i in enumerate(sorted(m.keys())):
         if not silent: print("Author '{}' (#{}/{})".format(m[i][0]['author'], n+1, len(m)))
         mod = util.unsilly_import("ffmirror." + m[i][0]['site'])
-        url = mod.user_url.format(number=m[i][0]['authorid'], hostname='www.fanfiction.net')
+        #url = mod.user_url.format(number=m[i][0]['authorid'], hostname=mod.hostname)
+        url = mod.get_user_url(m[i][0])
         download_list(url, silent=silent)
 
 def run_update():

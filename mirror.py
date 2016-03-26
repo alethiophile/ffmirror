@@ -50,7 +50,7 @@ def read_from_file(name):
             if o:
                 k,v = o.group(1),o.group(2)
                 try:
-                    if k in ['category', 'author', 'title']:
+                    if k in ['category', 'author', 'title', 'id', 'authorid']:
                         rv[k] = v
                     else:
                         rv[k] = int(v)
@@ -67,17 +67,17 @@ def read_from_file(name):
     return rv
 
 class FFMirror(object):
-    def __init__(self, mirror_dir, use_ids=False):
+    def __init__(self, mirror_dir, use_ids=True):
         self.mirror_dir = mirror_dir
         self.use_ids = use_ids
 
     def check_update(self, r, n=None):
-        """Check a downloaded metadata entry r against local files. Return
-        true if this entry needs redownloading. Because some people
-        (*cough*NeonZangetsu*cough*) can't pick unique titles for their
-        stories, also return false if IDs are not the same. This means you
-        miss one story or the other, but people who write multiple stories
-        under the same title deserve what they get."""
+        """Check a downloaded metadata entry r against local files. Return true if this
+        entry needs redownloading. This will return false (thus failing) on
+        colliding story titles if and only if use_ids is turned off. It is
+        recommended to set use_ids to on.
+
+        """
         if n is None:
             n = os.path.join(self.mirror_dir, story_file(r, self.use_ids))
         cr = read_from_file(n)

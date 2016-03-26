@@ -15,8 +15,16 @@ hostname = "www.fanfiction.net"
 story_url = "https://{hostname}/s/{number}/{chapter}/"
 user_url = "https://{hostname}/u/{number}/"
 
+file_version = 3 # for metadata check
+
 story_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/s/(?P<number>\d+)/?(?P<chapter>\d+)?/?")
 user_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/u/(?P<number>\d+)/?")
+
+def get_user_url(md):
+    return user_url.format(number=md['authorid'], hostname=hostname)
+
+def get_story_url(md):
+    return story_url.format(number=md['id'], chapter=1, hostname=hostname)
 
 # Functions related to downloading stories
 
@@ -87,7 +95,7 @@ def get_metadata(soup):
         reviews = int(ae.string.replace(",", ""))
         ids = ae.next_sibling
     ids = md.get_text()
-    sid = int(re.match(r".*id: (\d+).*", ids).group(1))
+    sid = re.match(r".*id: (\d+).*", ids).group(1)
     ud = md.find("span", attrs={"data-xutime": True})
     if ud.previous_sibling.endswith("Updated: "):
         updated = int(ud['data-xutime'])
@@ -180,7 +188,7 @@ def parse_entry(elem):
     """Given a BeautifulSoup element for a story listing, return a metadata object for the story."""
     title = elem['data-title'].replace("\\'", "'")
     category = elem['data-category'].replace("\\'", "'")
-    sid = int(elem['data-storyid'])
+    sid = elem['data-storyid']
     published = int(elem['data-datesubmit'])
     updated = int(elem['data-dateupdate'])
     reviews = int(elem['data-ratingtimes'])
@@ -207,10 +215,10 @@ def parse_entry(elem):
         al = elem.find('a', href=re.compile(r"^/u/.*"))
         author = al.string
         o = re.match(r"^/u/(\d+)/.*", al['href'])
-        authorid = int(o.group(1))
+        authorid = o.group(1)
     else: # in this case, the caller populates those fields
         author = ''
-        authorid = 0 
+        authorid = 0
     return {'title': title, 'category': category, 'id': sid, 'published': published, 'updated': updated, 
             'reviews': reviews, 'chapters': chapters, 'words': words, 'summary': summary, 'characters': chars, 
             'complete': complete, 'source': source, 'author': author, 'authorid': authorid, 'genre': genre, 
@@ -235,6 +243,6 @@ def download_list(number):
             fav.append(a)
         elif a['source'] == 'authored':
             a['author'] = author
-            a['authorid'] = int(number)
+            a['authorid'] = number
             auth.append(a)
     return auth, fav
