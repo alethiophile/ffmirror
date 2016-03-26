@@ -7,7 +7,7 @@
 # simpletags format; the resource is directory/file.html, while the tags are
 # whatever.
 
-import re, os, pickle
+import re, os, pickle, sys
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
 
@@ -37,8 +37,28 @@ category_to_tag = { 'Avatar: Last Airbender': 'avatar',
 #                    'Infinite Stratos/IS<インフィニット・ストラトス>': 'infinite stratos',
                     }
 
-def story_file(md):
-    return os.path.join(util.make_filename(md['author']), util.make_filename(md['title']) + '.html')
+def story_file(md, with_id=False):
+    if with_id:
+        return os.path.join(util.make_filename(md['author']) + '-' + md['authorid'],
+                            util.make_filename(md['title']) + '-' + md['id'] + '.html')
+    else:
+        return os.path.join(util.make_filename(md['author']), util.make_filename(md['title']) + '.html')
+
+def cat_to_tagset(category):
+    """Takes a category string, splits by crossover if necessary,
+    returns a set of fandom tags for it. Uses the category_to_tag
+    dictionary. This will mangle category names with the substring 
+    ' & ' in them, but those are rare; I've seen only one ever."""
+    rv = set()
+    cl = category.split(' & ')
+    for i in cl:
+        try:
+            rv.add(category_to_tag[i])
+        except KeyError:
+            rv.add(i.lower().replace(",", "")) # If a thing isn't in the list, just use its name in lowercase as a default,
+                                               # stripping out commas which are special to the tagging system
+    return rv
+
 
 def read_from_file(name):
     """Read a story metadata entry as returned by download_list out of
@@ -60,11 +80,12 @@ def read_from_file(name):
             if o:
                 k,v = o.group(1),o.group(2)
                 try:
-                    rv[k] = int(v)
+                    if k in ['category', 'author', 'title']:
+                        rv[k] = v
+                    else:
+                        rv[k] = int(v)
                 except ValueError:
                     rv[k] = v
-                if k == 'category':
-                    rv[k] = str(rv[k]) # a hack, but this should always be a string and sometimes isn't (work title '1776', I'm looking at you)
             else:
                 break # End if we find a line that isn't metadata; this also triggers on finding the end comment
     if not reading:
@@ -75,129 +96,124 @@ def read_from_file(name):
         return None
     return rv
 
-def check_update(r, n=None):
-    """Check a downloaded metadata entry r against local files. Return
-    true if this entry needs redownloading. Because some people
-    (*cough*NeonZangetsu*cough*) can't pick unique titles for their
-    stories, also return false if IDs are not the same. This means you
-    miss one story or the other, but people who write multiple stories
-    under the same title deserve what they get."""
-    if n is None:
-        n = story_file(r)
-    cr = read_from_file(n)
-    if cr == None:
-        return True
-    try:
-        if r['id'] != cr['id']:
-            return False
-        if r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or r['updated'] != cr['updated']:
+class FFMirror(object):
+    def __init__(self, mirror_dir):
+        self.mirror_dir = mirror_dir
+
+    def check_update(self, r, n=None):
+        """Check a downloaded metadata entry r against local files. Return
+        true if this entry needs redownloading. Because some people
+        (*cough*NeonZangetsu*cough*) can't pick unique titles for their
+        stories, also return false if IDs are not the same. This means you
+        miss one story or the other, but people who write multiple stories
+        under the same title deserve what they get."""
+        if n is None:
+            n = os.path.join(self.mirror_dir, story_file(r))
+        cr = read_from_file(n)
+        if cr == None:
             return True
-    except KeyError: # if the metadata is incomplete
-        return True
-    return False
-
-def cat_to_tagset(category):
-    """Takes a category string, splits by crossover if necessary,
-    returns a set of fandom tags for it. Uses the category_to_tag
-    dictionary. This will mangle category names with the substring 
-    ' & ' in them, but those are rare; I've seen only one ever."""
-    rv = set()
-    cl = category.split(' & ')
-    for i in cl:
         try:
-            rv.add(category_to_tag[i])
-        except KeyError:
-            rv.add(i.lower().replace(",", "")) # If a thing isn't in the list, just use its name in lowercase as a default,
-                                               # stripping out commas which are special to the tagging system
-    return rv
+            if r['id'] != cr['id']:
+                return False
+            if r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or r['updated'] != cr['updated']:
+                return True
+        except KeyError: # if the metadata is incomplete
+            return True
+        return False
 
-def update_list(sl, callback=None):
-    """This function takes a list of stories (as metadata entries) and downloads
-    them all. The filenames used are the result of story_file. No checking of
-    update requirement is done; for update-only, the caller should filter on the
-    result of check_update manually. callback is called at each story with the
-    index and result of download_metadata for the current story; it is also
-    passed to compile_story of the site module, which passes chapter index and
-    string title.
+    def update_list(self, sl, callback=None, id_tree=False):
+        """This function takes a list of stories (as metadata entries) and downloads
+        them all. The filenames used are the result of story_file. No checking of
+        update requirement is done; for update-only, the caller should filter on the
+        result of check_update manually. callback is called at each story with the
+        index and result of download_metadata for the current story; it is also
+        passed to compile_story of the site module, which passes chapter index and
+        string title.
 
-    """
-    for n, i in enumerate(sl):
-        mod = util.unsilly_import("ffmirror." + i['site'])
+        """
+        for n, i in enumerate(sl):
+            mod = util.unsilly_import("ffmirror." + i['site'])
+            try:
+                md, toc = mod.download_metadata(i['id'])
+            except Exception as e:
+                print(i)
+                continue
+            if callback: callback(n, (i, toc))
+            fn = os.path.join(self.mirror_dir, story_file(i, id_tree))
+            os.makedirs(os.path.split(fn)[0], exist_ok=True)
+            with open(fn, 'w') as out:
+                mod.compile_story(i, toc, out, contents=True, callback=callback)
+
+    def update_tags(self, sl):
+        """This function takes a list of metadata entries and updates the category tag
+        on all of them. The result of cat_to_tagset on each story's category is
+        added to that story's tag set; tags are then written back.
+
+        """
+        tfn = os.path.join(self.mirror_dir, 'tags')
         try:
-            md, toc = mod.download_metadata(i['id'])
-        except Exception as e:
-            print(i)
-            continue
-        if callback: callback(n, (i, toc))
-        n = story_file(i)
-        os.makedirs(os.path.split(n)[0], exist_ok=True)
-        with open(n, 'w') as out:
-            mod.compile_story(i, toc, out, contents=True, callback=callback)
+            to = read_tags(tfn)
+        except FileNotFoundError:
+            to = {}
+        for i in sl:
+            fn = story_file(i)
+            ct = cat_to_tagset(i['category'])
+            if fn in to:
+                to[fn].update(ct)
+            else:
+                to[fn] = ct
+        write_tags(to, tfn)
 
-def update_tags(sl):
-    """This function takes a list of metadata entries and updates the category tag
-    on all of them. The result of cat_to_tagset on each story's category is
-    added to that story's tag set; tags are then written back.
+    def read_entries(self):
+        """Reads all the .html files below the current directory for ffmirror metadata;
+        returns them as a dictionary of author name to list of story metadata
+        entries. This should yield the data of all the files in the mirror. This
+        function takes a long time on a large database; see the various caching
+        functions.
 
-    """
-    try:
-        to = read_tags()
-    except FileNotFoundError:
-        to = {}
-    for i in sl:
-        fn = story_file(i)
-        ct = cat_to_tagset(i['category'])
-        if fn in to:
-            to[fn].update(ct)
+        """
+        rv = {}
+        tfn = os.path.join(self.mirror_dir, 'tags')
+        ts = read_tags(tfn)
+        #print(ts, file=sys.stderr)
+        for d, sds, fs in os.walk(self.mirror_dir):
+            for n in fs:
+                if n.endswith(".html"):
+                    fn = os.path.join(d, n)
+                    rel_fn = fn[len(self.mirror_dir)+1:] # path relative to mirror_dir
+                    #print(fn, self.mirror_dir, rel_fn, file=sys.stderr)
+                    a = read_from_file(fn)
+                    if a == None:
+                        continue
+                    a['filename'] = rel_fn
+                    if rel_fn in ts:
+                        a['tags'] = ts[rel_fn]
+                    else:
+                        a['tags'] = set()
+                    if a['author'] in rv:
+                        rv[a['author']].append(a)
+                    else:
+                        rv[a['author']] = [a]
+        return rv
+
+    def make_cache(self):
+        """Calls read_entries(), stores the result (pickled) in the file index.db. This
+        takes a long time on a large database.
+
+        """
+        with open(os.path.join(self.mirror_dir, "index.db"), 'wb') as fcache:
+            pickle.dump(self.read_entries(), fcache, 3)
+
+    def get_index(self):
+        """Checks if the cache created by make_cache is up to date; if not, updates it.
+        Either way, returns the index dictionary created by read_entries()."""
+        cache_fn = os.path.join(self.mirror_dir, "index.db")
+        ls = max(((i, os.stat(os.path.join(self.mirror_dir, i))) for i in os.listdir(self.mirror_dir)), key=lambda x: x[1].st_mtime)
+        if ls[0] != "index.db":
+            a = self.read_entries()
+            with open(cache_fn, 'wb') as fcache:
+                pickle.dump(a, fcache, 3)
         else:
-            to[fn] = ct
-    write_tags(to)
-
-def read_entries():
-    """Reads all the .html files below the current directory for ffmirror metadata;
-    returns them as a dictionary of author name to list of story metadata
-    entries. This should yield the data of all the files in the mirror. This
-    function takes a long time on a large database; see the various caching
-    functions.
-
-    """
-    rv = {}
-    ts = read_tags()
-    for d, sds, fs in os.walk("."):
-        for n in fs:
-            if n.endswith(".html"):
-                fn = os.path.join(d, n)[2:] # elide './' from front
-                a = read_from_file(fn)
-                if a == None:
-                    continue
-                a['filename'] = fn
-                if fn in ts:
-                    a['tags'] = ts[fn]
-                else:
-                    a['tags'] = set()
-                if a['author'] in rv:
-                    rv[a['author']].append(a)
-                else:
-                    rv[a['author']] = [a]
-    return rv
-
-def make_cache():
-    """Calls read_entries(), stores the result (pickled) in the file index.db. This
-    takes a long time on a large database.
-
-    """
-    with open("index.db", 'wb') as fcache:
-        pickle.dump(read_entries(), fcache, 3)
-
-def get_index():
-    """Checks if the cache created by make_cache is up to date; if not, updates it.
-    Either way, returns the index dictionary created by read_entries()."""
-    ls = max(((i, os.stat(i)) for i in os.listdir()), key=lambda x: x[1].st_mtime)
-    if ls[0] != "index.db":
-        a = read_entries()
-        with open("index.db", 'wb') as fcache:
-            pickle.dump(a, fcache, 3)
-    else:
-        with open("index.db", 'rb') as fcache:
-            a = pickle.load(fcache)
-    return a
+            with open(cache_fn, 'rb') as fcache:
+                a = pickle.load(fcache)
+        return a

@@ -3,7 +3,7 @@
 # unconditionally, since ~1m delay in a CGI script is unacceptable. Make sure
 # the cache is up to date for correct output.
 
-from ffmirror.mirror import read_entries
+#import ffmirror.mirror as mirror
 import urllib.parse, pickle, sys
 from datetime import datetime
 

@@ -10,6 +10,8 @@ import re, sys, argparse, os
 import ffmirror.util as util
 import ffmirror.mirror as mirror
 
+cur_mirror = mirror.FFMirror('.')
+
 urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')),
            (re.compile("https?://www.fictionpress.com/.*"), util.unsilly_import('ffmirror.ffnet')) ]
 
@@ -45,7 +47,7 @@ def download_story(url, **kwargs):
             print(i)
         return
     if kwargs['update']:
-        if not mirror.check_update(md, ufn):
+        if not cur_mirror.check_update(md, ufn):
             if not kwargs['silent']: print("Nothing to do (up to date)")
             return
     if kwargs['outfile']:
@@ -82,7 +84,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kw
     auth, fav = mod.download_list(uid)
     sl = fav if ls else auth
     if not getall:
-        nsl = [i for i in sl if mirror.check_update(i)]
+        nsl = [i for i in sl if cur_mirror.check_update(i)]
     else:
         nsl = sl
     if not silent and len(auth) > 0: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
@@ -90,7 +92,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kw
         for i in nsl:
             print(i)
         return
-    mirror.update_tags(nsl)
+    cur_mirror.update_tags(nsl)
     lsl = 0
     def progress(i, n):
         nonlocal lsl
@@ -102,7 +104,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kw
                 print("Got chapter {} of {}".format(i+1, lsl), end='\r')
                 if i == lsl - 1:
                     print("\n", end="")
-    mirror.update_list(nsl, callback=progress)
+    cur_mirror.update_list(nsl, callback=progress)
 
 def run_add():
     ap = argparse.ArgumentParser(description="Add an author's corpus or favorites to a mirror, or update them")
@@ -115,7 +117,7 @@ def run_add():
     download_list(**args.__dict__)
 
 def update_mirror(silent=False):
-    m = mirror.read_entries()
+    m = cur_mirror.read_entries()
     for n,i in enumerate(sorted(m.keys())):
         if not silent: print("Author '{}' (#{}/{})".format(m[i][0]['author'], n+1, len(m)))
         mod = util.unsilly_import("ffmirror." + m[i][0]['site'])
@@ -129,7 +131,7 @@ def run_update():
     update_mirror(**args.__dict__)
 
 def do_cache():
-    mirror.make_cache()
+    cur_mirror.make_cache()
     
 actions = { 'ffdl': run_dl,
             'ffadd': run_add,
