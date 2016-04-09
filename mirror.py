@@ -7,22 +7,24 @@
 # simpletags format; the resource is directory/file.html, while the tags are
 # whatever.
 
-import re, os, pickle, sys
+import re, os, pickle, sys, traceback
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
+from ffmirror import sites, urlres
 
 def story_file(md, with_id=False):
     if with_id:
-        return os.path.join(util.make_filename(md['author']) + '-' + md['authorid'],
+        return os.path.join(util.make_filename(md['author']) + '-' + md['site'] + '-' + md['authorid'],
                             util.make_filename(md['title']) + '-' + md['id'] + '.html')
     else:
         return os.path.join(util.make_filename(md['author']), util.make_filename(md['title']) + '.html')
 
 def cat_to_tagset(category):
-    """Takes a category string, splits by crossover if necessary,
-    returns a set of fandom tags for it. Uses the category_to_tag
-    dictionary. This will mangle category names with the substring 
-    ' & ' in them, but those are rare; I've seen only one ever."""
+    """Takes a category string, splits by crossover if necessary, returns a set of
+    fandom tags for it. This will mangle category names with the substring ' & '
+    in them, but those are rare; I've seen only one ever.
+
+    """
     rv = set()
     cl = category.split(' & ')
     for i in cl:
@@ -103,11 +105,12 @@ class FFMirror(object):
 
         """
         for n, i in enumerate(sl):
-            mod = util.unsilly_import("ffmirror." + i['site'])
+            mod = sites[i['site']]
             try:
                 md, toc = mod.download_metadata(i['id'])
             except Exception as e:
                 print(i)
+                traceback.print_exc()
                 continue
             if callback: callback(n, (i, toc))
             fn = os.path.join(self.mirror_dir, story_file(i, self.use_ids))
@@ -175,12 +178,12 @@ class FFMirror(object):
         with open(os.path.join(self.mirror_dir, "index.db"), 'wb') as fcache:
             pickle.dump(self.read_entries(), fcache, 3)
 
-    def get_index(self):
+    def get_index(self, check=True):
         """Checks if the cache created by make_cache is up to date; if not, updates it.
         Either way, returns the index dictionary created by read_entries()."""
         cache_fn = os.path.join(self.mirror_dir, "index.db")
         ls = max(((i, os.stat(os.path.join(self.mirror_dir, i))) for i in os.listdir(self.mirror_dir)), key=lambda x: x[1].st_mtime)
-        if ls[0] != "index.db":
+        if check and ls[0] != "index.db":
             a = self.read_entries()
             with open(cache_fn, 'wb') as fcache:
                 pickle.dump(a, fcache, 3)

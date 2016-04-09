@@ -9,11 +9,10 @@
 import re, sys, argparse, os
 import ffmirror.util as util
 import ffmirror.mirror as mirror
+import ffmirror.ffnet
+from ffmirror import sites, urlres
 
 cur_mirror = mirror.FFMirror('.', use_ids=True)
-
-urlres = [ (re.compile("https?://www.fanfiction.net/.*"), util.unsilly_import('ffmirror.ffnet')),
-           (re.compile("https?://www.fictionpress.com/.*"), util.unsilly_import('ffmirror.ffnet')) ]
 
 def parse_url(url):
     """Given a fanfiction URL (either story or author), this function will return
@@ -29,7 +28,7 @@ def download_story(url, **kwargs):
     if kwargs['update']:
         o = mirror.read_from_file(url)
         ufn = url
-        mod = util.unsilly_import('ffmirror.' + o['site'])
+        mod = sites[o['site']]
         #url = mod.story_url.format(number=o['id'], chapter=1, hostname=mod.hostname)
         url = mod.get_story_url(o)
     else:
@@ -90,7 +89,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kw
         nsl = sl
     if not silent and len(auth) > 0: print("Got {} (of {}) stories from author {}".format(len(nsl), len(sl), auth[0]['author']))
     if dry_run:
-        for i in nsl:
+        for i in sl:
             print(i)
         return
     cur_mirror.update_tags(nsl)
@@ -121,7 +120,7 @@ def update_mirror(silent=False):
     m = cur_mirror.read_entries()
     for n,i in enumerate(sorted(m.keys())):
         if not silent: print("Author '{}' (#{}/{})".format(m[i][0]['author'], n+1, len(m)))
-        mod = util.unsilly_import("ffmirror." + m[i][0]['site'])
+        mod = sites[m[i][0]['site']]
         #url = mod.user_url.format(number=m[i][0]['authorid'], hostname=mod.hostname)
         url = mod.get_user_url(m[i][0])
         download_list(url, silent=silent)
