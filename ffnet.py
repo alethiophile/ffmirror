@@ -5,8 +5,7 @@
 # __main__ or the update functions in mirror. Also handles FictionPress, since
 # they're identical.
 
-import urllib.request, urllib.error, re, shlex
-import http.cookiejar
+import re
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
@@ -136,7 +135,6 @@ class FFNet(object):
 
         """
         url = self.story_url.format(hostname=self.hostname, number=number, chapter=1)
-        print(url)
         r = urlopen_retry(url)
         data = r.read()
         soup = BeautifulSoup(data, 'html5lib')
