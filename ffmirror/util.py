@@ -18,7 +18,7 @@ def fold_string_indiscriminately(s, n=80):
         else:
             rv += ' \n' + i
             cl = len(i)
-    return rv[1:] # remove extraneous leading space
+    return rv[1:]  # remove extraneous leading space
 
 def fold_string_discriminately(s, n=80):
     """Folds a string discriminately, that is, preserving existing
@@ -52,8 +52,9 @@ def urlopen_retry(url, tries=3, delay=1):
             return r
         
 def unsilly_import(name):
-    mod = __import__(name) # For dotted imports, this _imports_ the module you want, but _returns_ the top-level package.
+    # For dotted imports, this _imports_ the module you want, but _returns_ the
+    # top-level package.
+    mod = __import__(name)
     for i in name.split('.')[1:]:
         mod = getattr(mod, i)
     return mod
-

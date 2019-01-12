@@ -1,23 +1,24 @@
 # Functions for maintaining an offline mirror of a large number of stories. The
 # format of the mirror is as follows: in the top level are directories each
-# titled for an author. Within each directory are files each titled for a story.
-# Each file contains an entire story as HTML. The files contain comments with
-# relevant metadata; this allows updating properly and browsing easily. The
-# top-level directory also contains a single 'tags' file containing tags in the
-# simpletags format; the resource is directory/file.html, while the tags are
-# whatever.
+# titled for an author. Within each directory are files each titled for a
+# story. Each file contains an entire story as HTML. The files contain comments
+# with relevant metadata; this allows updating properly and browsing easily.
+# The top-level directory also contains a single 'tags' file containing tags in
+# the simpletags format; the resource is directory/file.html, while the tags
+# are whatever.
 
-import re, os, pickle, sys, traceback
+import os, pickle, traceback, json
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
-from ffmirror import sites, urlres
+from ffmirror import sites
 
 def story_file(md, with_id=False):
     if with_id:
-        return os.path.join(util.make_filename(md['author']) + '-' + md['site'] + '-' + md['authorid'],
-                            util.make_filename(md['title']) + '-' + md['id'] + '.html')
+        return os.path.join("{}-{}-{}".format(util.make_filename(md['author']),
+                                              md['site'], md['authorid']),
+                            util.make_filename(
+                                "{}-{}.html".format(md['title'], md['id'])))
     else:
-        return os.path.join(util.make_filename(md['author']), util.make_filename(md['title']) + '.html')
 
 def cat_to_tagset(category):
     """Takes a category string, splits by crossover if necessary, returns a set of
@@ -31,20 +32,25 @@ def cat_to_tagset(category):
         # Tag name is category name, in lowercase, minus any commas
         rv.add(i.lower().replace(",", ""))
     return rv
+        return os.path.join(util.make_filename(md['author']),
+                            util.make_filename(md['title']) + '.html')
 
 def read_from_file(name):
     """Read a story metadata entry as returned by download_list out of
     a file. If file is nonexistent or unreadable, or metadata cannot
     be read, return None."""
     try:
-        f = open(name, "rb", buffering=0) # Binary mode in order to support seek()
+        # Binary mode in order to support seek()
+        f = open(name, "rb", buffering=0)
     except IOError:
         return None
     reading = False
     rv = {}
     for line in f:
         line = line.decode()
-        if line[0:4] == "<!--" and not "-->" in line: # First (and presumably only) HTML comment in output file will be metadata block
+        # First (and presumably only) HTML comment in output file will be
+        # metadata block
+        if line[0:4] == "<!--" and "-->" not in line:
             reading = True
             continue
         if reading:
@@ -64,7 +70,8 @@ def read_from_file(name):
         return None
     f.seek(-8, 2)
     s = f.readline().decode()
-    if s != "</html>\n": # Incomplete file, probably left over from an earlier interrupted DL
+    # Incomplete file, probably left over from an earlier interrupted DL
+    if s != "</html>\n":
         return None
     return rv
 
@@ -83,7 +90,7 @@ class FFMirror(object):
         if n is None:
             n = os.path.join(self.mirror_dir, story_file(r, self.use_ids))
         cr = read_from_file(n)
-        if cr == None:
+        if cr is None:
             return True
         try:
             if r['id'] != cr['id'] and not self.use_ids:
@@ -96,12 +103,12 @@ class FFMirror(object):
 
     def update_list(self, sl, callback=None):
         """This function takes a list of stories (as metadata entries) and downloads
-        them all. The filenames used are the result of story_file. No checking of
-        update requirement is done; for update-only, the caller should filter on the
-        result of check_update manually. callback is called at each story with the
-        index and result of download_metadata for the current story; it is also
-        passed to compile_story of the site module, which passes chapter index and
-        string title.
+        them all. The filenames used are the result of story_file. No checking
+        of update requirement is done; for update-only, the caller should
+        filter on the result of check_update manually. callback is called at
+        each story with the index and result of download_metadata for the
+        current story; it is also passed to compile_story of the site module,
+        which passes chapter index and string title.
 
         """
         for n, i in enumerate(sl):
@@ -112,11 +119,13 @@ class FFMirror(object):
                 print(i)
                 traceback.print_exc()
                 continue
-            if callback: callback(n, (i, toc))
             fn = os.path.join(self.mirror_dir, story_file(i, self.use_ids))
+            if callback:
+                callback(n, (i, toc))
             os.makedirs(os.path.split(fn)[0], exist_ok=True)
             with open(fn, 'w') as out:
-                mod.compile_story(i, toc, out, contents=True, callback=callback)
+                mod.compile_story(md, toc, out, contents=True,
+                                  callback=callback)
 
     def update_tags(self, sl):
         """This function takes a list of metadata entries and updates the category tag
@@ -141,23 +150,21 @@ class FFMirror(object):
     def read_entries(self):
         """Reads all the .html files below the current directory for ffmirror metadata;
         returns them as a dictionary of author name to list of story metadata
-        entries. This should yield the data of all the files in the mirror. This
-        function takes a long time on a large database; see the various caching
-        functions.
+        entries. This should yield the data of all the files in the mirror.
+        This function takes a long time on a large database; see the various
+        caching functions.
 
         """
         rv = {}
         tfn = os.path.join(self.mirror_dir, 'tags')
         ts = read_tags(tfn)
-        #print(ts, file=sys.stderr)
         for d, sds, fs in os.walk(self.mirror_dir):
             for n in fs:
                 if n.endswith(".html"):
                     fn = os.path.join(d, n)
                     rel_fn = fn[len(self.mirror_dir)+1:] # path relative to mirror_dir
-                    #print(fn, self.mirror_dir, rel_fn, file=sys.stderr)
                     a = read_from_file(fn)
-                    if a == None:
+                    if a is None:
                         continue
                     a['filename'] = rel_fn
                     if rel_fn in ts:
@@ -182,7 +189,8 @@ class FFMirror(object):
         """Checks if the cache created by make_cache is up to date; if not, updates it.
         Either way, returns the index dictionary created by read_entries()."""
         cache_fn = os.path.join(self.mirror_dir, "index.db")
-        ls = max(((i, os.stat(os.path.join(self.mirror_dir, i))) for i in os.listdir(self.mirror_dir)), key=lambda x: x[1].st_mtime)
+        ls = max(((i, os.stat(os.path.join(self.mirror_dir, i))) for i in
+                  os.listdir(self.mirror_dir)), key=lambda x: x[1].st_mtime)
         if check and ls[0] != "index.db":
             a = self.read_entries()
             with open(cache_fn, 'wb') as fcache:
