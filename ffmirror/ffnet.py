@@ -119,10 +119,24 @@ class FFNet(object):
             category = e.a.find_next_sibling('a').string
         except AttributeError:
             category = 'crossover'
-        return {'title': title, 'summary': summary, 'category': category, 'id': sid, 
-                'reviews': reviews, 'chapters': chapters, 'words': words, 'characters': characters, 
-                'source': 'story', 'author': author, 'authorid': authorid, 'genre': genre,
-                'site': self.this_site, 'updated': updated, 'published': published, 'complete': complete}
+        author_url = self.user_url.format(hostname=self.hostname,
+                                          number=authorid)
+        story_url = self.story_url.format(hostname=self.hostname, number=sid,
+                                          chapter=1)
+        author_dir = "{}-{}-{}".format(make_filename(author), self.this_site,
+                                       authorid)
+        trv = {'title': title, 'summary': summary, 'category': category,
+               'id': sid, 'reviews': reviews, 'chapters': chapters,
+               'words': words, 'characters': characters, 'source': 'story',
+               'author': author, 'authorid': authorid, 'genre': genre, 'site':
+               self.this_site, 'updated': updated, 'published': published,
+               'complete': complete, 'story_url': story_url, 'author_url':
+               author_url, 'author_dir': author_dir}
+        for i in trv:
+            if type(trv[i]) == NavigableString:
+                trv[i] = str(trv[i])
+        return trv
+
     def _make_toc(self, contents):
         """Makes an HTML string table of contents to be concatenated into outstr, given
         the return value of _get_contents (array of chapter names).
@@ -234,13 +248,28 @@ body {{ font-family: sans-serif }}
             author = al.string
             o = re.match(r"^/u/(\d+)/.*", al['href'])
             authorid = o.group(1)
+            author_url = self.user_url.format(hostname=self.hostname,
+                                              number=authorid)
+            author_dir = "{}-{}-{}".format(make_filename(author),
+                                           self.this_site, authorid)
         else:  # in this case, the caller populates those fields
             author = ''
             authorid = 0
-        return {'title': title, 'category': category, 'id': sid, 'published': published, 'updated': updated, 
-                'reviews': reviews, 'chapters': chapters, 'words': words, 'summary': summary, 'characters': chars, 
-                'complete': complete, 'source': source, 'author': author, 'authorid': authorid, 'genre': genre, 
-                'site': self.this_site}
+            author_url = ''
+            author_dir = ''
+        story_url = self.story_url.format(hostname=self.hostname, number=sid,
+                                          chapter=1)
+        trv = {'title': title, 'category': category, 'id': sid,
+               'published': published, 'updated': updated, 'reviews': reviews,
+               'chapters': chapters, 'words': words, 'summary': summary,
+               'characters': chars, 'complete': complete, 'source': source,
+               'author': author, 'authorid': authorid, 'genre': genre,
+               'site': self.this_site, 'story_url': story_url,
+               'author_url': author_url, 'author_dir': author_dir }
+        for i in trv:
+            if type(trv[i]) == NavigableString:
+                trv[i] = str(trv[i])
+        return trv
 
     def download_list(self, number):
         """Given a user ID, download lists of the stories they've written and favorited
@@ -256,6 +285,8 @@ body {{ font-family: sans-serif }}
                   strip())
         auth = []
         fav = []
+        author_dir = "{}-{}-{}".format(make_filename(author), self.this_site,
+                                       number)
         for i in soup.find_all('div', class_='z-list'):
             a = self._parse_entry(i)
             if a['source'] == 'favorites':
@@ -263,8 +294,12 @@ body {{ font-family: sans-serif }}
             elif a['source'] == 'authored':
                 a['author'] = author
                 a['authorid'] = number
+                a['author_dir'] = author_dir
+                a['author_url'] = url
                 auth.append(a)
-        return auth, fav
+        info = {'author': author, 'authorid': number, 'site': self.this_site,
+                'author_url': url, 'author_dir': author_dir}
+        return auth, fav, info
 
 class FictionPress(FFNet):
     hostname = "www.fictionpress.com"

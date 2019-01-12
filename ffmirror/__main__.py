@@ -93,10 +93,18 @@ def run_dl():
     args = ap.parse_args()
     download_story(**args.__dict__)
 
-def download_list(url, ls=False, silent=False, getall=False, dry_run=False, **kwargs):
+def download_list(url, ls=False, silent=False, getall=False, dry_run=False,
+                  write_favs=False, **kwargs):
     mod = parse_url(url)
-    auth, fav = mod.download_list(uid)
     uid = mod.user_url_re.match(url).group('aid')
+    auth, fav, info = mod.download_list(uid)
+    if write_favs:
+        dn = "{}-{}-{}".format(util.make_filename(info['author']),
+                               info['site'], info['authorid'])
+        os.makedirs(dn, exist_ok=True)
+        with open(os.path.join(dn, 'favorites.json'), 'w') as out:
+            json.dump({'info': info, 'favs': fav}, out, sort_keys=True,
+                      indent=1)
     sl = fav if ls else auth
     if not getall:
         nsl = [i for i in sl if cur_mirror.check_update(i)]
@@ -139,7 +147,7 @@ def run_add():
                     help="Dry run (only parse list and print)")
     ap.add_argument("url", help="A URL for an author's profile")
     args = ap.parse_args()
-    download_list(**args.__dict__)
+    download_list(write_favs=True, **args.__dict__)
 
 def update_mirror(silent=False):
     m = cur_mirror.read_entries()
@@ -151,6 +159,7 @@ def update_mirror(silent=False):
         if not silent:
             print("Author '{}' (#{}/{})".format(m[i].info['author'], n + 1,
                                                 len(m)))
+        download_list(url, write_favs=True, silent=silent)
 
 def run_update():
     ap = argparse.ArgumentParser(description="Update an entire mirror from the Web site")  # noqa: E501
