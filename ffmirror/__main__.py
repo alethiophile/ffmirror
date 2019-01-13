@@ -9,6 +9,7 @@
 import sys, argparse, os, json
 import ffmirror.util as util
 import ffmirror.mirror as mirror
+import ffmirror.metadb as metadb
 from ffmirror import sites, urlres
 
 cur_mirror = mirror.FFMirror('.', use_ids=True)
@@ -32,7 +33,6 @@ def download_story(url, **kwargs):
     else:
         mod = parse_url(url)
     o = mod.story_url_re.match(url)
-    mod.hostname = o.group('hostname')
     sid = o.group('sid')
     md, toc = mod.download_metadata(sid)
     if not kwargs['silent']:
@@ -191,3 +191,25 @@ if __name__ == "__main__":
         print("Try one of:")
         for i in actions.keys():
             print(i)
+def run_db_op():
+    mm = metadb.DBMirror('.')
+    mm.connect()
+    if sys.argv[1] == 'update':
+        if len(sys.argv) > 2:
+            dn = sys.argv[2]
+            if dn.endswith('/'):
+                dn = dn[:-1]
+            site, aid = metadb.get_archive_id(dn)
+            ao = mm.get_author(site, aid)
+            mm.sync_author(ao)
+            mm.archive_author(ao)
+        else:
+            mm.run_update()
+    elif sys.argv[1] == 'add':
+        url = sys.argv[2]
+        mod = parse_url(url)
+        site = mod.this_site
+        aid = mod.user_url_re.match(url).group('aid')
+        mm.sync_author((site, aid))
+        ao = mm.get_author(site, aid)
+        mm.archive_author(ao)
