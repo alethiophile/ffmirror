@@ -149,16 +149,15 @@ def run_add():
     args = ap.parse_args()
     download_list(write_favs=True, **args.__dict__)
 
-def update_mirror(silent=False):
+def update_mirror(silent=False, author=None):
     m = cur_mirror.read_entries()
-        mod = sites[m[i][0]['site']]
-        #url = mod.user_url.format(number=m[i][0]['authorid'], hostname=mod.hostname)
-        url = mod.get_user_url(m[i][0])
-        download_list(url, silent=silent)
     for n, i in enumerate(sorted(m.keys())):
+        if author is not None and author != i:
+            continue
         if not silent:
             print("Author '{}' (#{}/{})".format(m[i].info['author'], n + 1,
                                                 len(m)))
+        url = m[i].info['author_url']
         download_list(url, write_favs=True, silent=silent)
 
 def run_update():
