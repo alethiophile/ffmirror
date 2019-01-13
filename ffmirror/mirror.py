@@ -19,19 +19,6 @@ def story_file(md, with_id=False):
                             util.make_filename(
                                 "{}-{}.html".format(md['title'], md['id'])))
     else:
-
-def cat_to_tagset(category):
-    """Takes a category string, splits by crossover if necessary, returns a set of
-    fandom tags for it. This will mangle category names with the substring ' & '
-    in them, but those are rare; I've seen only one ever.
-
-    """
-    rv = set()
-    cl = category.split(' & ')
-    for i in cl:
-        # Tag name is category name, in lowercase, minus any commas
-        rv.add(i.lower().replace(",", ""))
-    return rv
         return os.path.join(util.make_filename(md['author']),
                             util.make_filename(md['title']) + '.html')
 
@@ -54,18 +41,17 @@ def read_from_file(name):
             reading = True
             continue
         if reading:
-            o = re.match(r"([^:]+): (.*)", line)
-            if o:
-                k,v = o.group(1),o.group(2)
-                try:
-                    if k in ['category', 'author', 'title', 'id', 'authorid']:
-                        rv[k] = v
-                    else:
-                        rv[k] = int(v)
-                except ValueError:
+            try:
+                k, v = line.strip("\n").split(': ', 1)
+            except ValueError:
+                break
+            try:
+                if k in ['category', 'author', 'title', 'id', 'authorid']:
                     rv[k] = v
-            else:
-                break # End if we find a line that isn't metadata; this also triggers on finding the end comment
+                else:
+                    rv[k] = int(v)
+            except ValueError:
+                rv[k] = v
     if not reading:
         return None
     f.seek(-8, 2)
@@ -74,6 +60,46 @@ def read_from_file(name):
     if s != "</html>\n":
         return None
     return rv
+
+# Turns out the optimized-and-kind-of-painful version really is about twice as
+# fast as brute-force, which I think is worth it.
+
+class AuthorInfo(object):
+    def __init__(self, author_dir):
+        self.stories = []
+        self._info = None
+        self._favs = None
+        self._author_dir = author_dir
+
+    @property
+    def info(self):
+        if self._info is not None:
+            return self._info
+        test = self.favs  # noqa: F841 (this is a hack)
+        return self._info
+
+    @property
+    def favs(self):
+        if self._favs is not None:
+            return self._favs
+        fn = os.path.join(self._author_dir, 'favorites.json')
+        try:
+            with open(fn) as inp:
+                ai = json.load(inp)
+        except:
+            return []
+        if self._info is None:
+            self._info = ai['info']
+        self._favs = ai['favs']
+        return self._favs
+
+    def with_tag(self, tag):
+        rv = AuthorInfo(self._author_dir)
+        rv.stories = [i for i in self.stories if tag in i['tags']]
+        rv._info, rv._favs = self._info, self._favs
+        if len(rv.stories) == 0:
+            return None
+        return rv
 
 class FFMirror(object):
     def __init__(self, mirror_dir, use_ids=True):
@@ -92,14 +118,8 @@ class FFMirror(object):
         cr = read_from_file(n)
         if cr is None:
             return True
-        try:
-            if r['id'] != cr['id'] and not self.use_ids:
-                return False
-            if r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or r['updated'] != cr['updated']:
-                return True
-        except KeyError: # if the metadata is incomplete
-            return True
-        return False
+        mod = sites[r['site']]
+        return not mod.compare_mds(r, cr)
 
     def update_list(self, sl, callback=None):
         """This function takes a list of stories (as metadata entries) and downloads
@@ -119,9 +139,9 @@ class FFMirror(object):
                 print(i)
                 traceback.print_exc()
                 continue
-            fn = os.path.join(self.mirror_dir, story_file(i, self.use_ids))
             if callback:
                 callback(n, (i, toc))
+            fn = os.path.join(self.mirror_dir, story_file(md, self.use_ids))
             os.makedirs(os.path.split(fn)[0], exist_ok=True)
             with open(fn, 'w') as out:
                 mod.compile_story(md, toc, out, contents=True,
@@ -140,7 +160,8 @@ class FFMirror(object):
             to = {}
         for i in sl:
             fn = story_file(i, self.use_ids)
-            ct = cat_to_tagset(i['category'])
+            mod = sites[i['site']]
+            ct = mod.get_tags_for(i)
             if fn in to:
                 to[fn].update(ct)
             else:
@@ -157,24 +178,32 @@ class FFMirror(object):
         """
         rv = {}
         tfn = os.path.join(self.mirror_dir, 'tags')
-        ts = read_tags(tfn)
+        try:
+            ts = read_tags(tfn)
+        except FileNotFoundError:
+            ts = {}
         for d, sds, fs in os.walk(self.mirror_dir):
+            for i in [n for n in sds if n.startswith('.')]:
+                sds.remove(i)
             for n in fs:
                 if n.endswith(".html"):
                     fn = os.path.join(d, n)
-                    rel_fn = fn[len(self.mirror_dir)+1:] # path relative to mirror_dir
+                    rel_fn = os.path.relpath(fn, self.mirror_dir)
                     a = read_from_file(fn)
                     if a is None:
                         continue
                     a['filename'] = rel_fn
+                    adn = os.path.dirname(rel_fn)
                     if rel_fn in ts:
                         a['tags'] = ts[rel_fn]
                     else:
                         a['tags'] = set()
-                    if a['author'] in rv:
-                        rv[a['author']].append(a)
+                    if adn in rv:
+                        rv[adn].stories.append(a)
                     else:
-                        rv[a['author']] = [a]
+                        rv[adn] = AuthorInfo(os.path.abspath(
+                            os.path.dirname(fn)))
+                        rv[adn].stories.append(a)
         return rv
 
     def make_cache(self):
@@ -187,7 +216,10 @@ class FFMirror(object):
 
     def get_index(self, check=True):
         """Checks if the cache created by make_cache is up to date; if not, updates it.
-        Either way, returns the index dictionary created by read_entries()."""
+        Either way, returns the index dictionary created by read_entries(). If
+        check is false, return the cache unconditionally (used in the Web app).
+
+        """
         cache_fn = os.path.join(self.mirror_dir, "index.db")
         ls = max(((i, os.stat(os.path.join(self.mirror_dir, i))) for i in
                   os.listdir(self.mirror_dir)), key=lambda x: x[1].st_mtime)
