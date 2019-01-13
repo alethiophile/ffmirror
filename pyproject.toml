@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "ffmirror"
+version = "0.2.0"
+description = "Local mirror for Internet fiction sites"
+authors = ["alethiophile <tomdicksonhunt@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+beautifulsoup4 = "^4.7"
+html5lib = "^1.0"
+python-dateutil = "^2.7"
+sqlalchemy = "^1.2"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+ffdl = "ffmirror.__main__:run_dl"
+ffadd = "ffmirror.__main__:run_add"
+ffup = "ffmirror.__main__:run_update"
+ffcache = "ffmirror.__main__:do_cache"
+ffdb = "ffmirror.__main__:run_db_op"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"

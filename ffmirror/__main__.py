@@ -171,26 +171,7 @@ def run_update():
 
 def do_cache():
     cur_mirror.make_cache()
-    
-actions = { 'ffdl': run_dl,
-            'ffadd': run_add,
-            'ffup': run_update,
-            'ffcache': do_cache }
 
-if __name__ == "__main__":
-    pn = os.path.split(sys.argv[0])[1]
-    if not pn in actions:
-        sys.argv.pop(0)
-        if len(sys.argv) == 0:
-            sys.argv.append("")
-        pn = os.path.split(sys.argv[0])[1]
-    if pn in actions:
-        actions[pn]()
-    else:
-        print("No such module available")
-        print("Try one of:")
-        for i in actions.keys():
-            print(i)
 def run_db_op():
     mm = metadb.DBMirror('.')
     mm.connect()
