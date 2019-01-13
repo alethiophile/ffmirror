@@ -5,13 +5,38 @@
 # __main__ or the update functions in mirror. Also handles FictionPress, since
 # they're identical.
 
-import re
+import re, time
 from bs4 import BeautifulSoup
-from bs4.element import Tag
+from bs4.element import Tag, NavigableString
 
 from ffmirror.util import (make_filename, urlopen_retry,
                            fold_string_indiscriminately)
 
+def cat_to_tagset(category):
+    """Takes a category string, splits by crossover if necessary, returns a set of
+    fandom tags for it. This will mangle category names with the substring
+    ' & ' in them, but those are rare; I've seen only one ever.
+
+    """
+    rv = set()
+    cl = category.split(' & ')
+    for i in cl:
+        # Tag name is category name, in lowercase, minus any commas
+        rv.add(i.lower().replace(",", ""))
+    return rv
+
+# A site module needs to implement the following:
+#  - get_user_url(self, md):
+#    given a story metadata object, return a canonical link for the author
+#  - get_story_url(self, md):
+#    given a story metadata object, return a canonical link for the story
+#  - download_metadata(self, sid):
+#    given a story ID, download its metadata and TOC and return
+#  - compile_story(self, md, toc, outfile):
+#    given metadata and TOC, download a whole story and write it to outfile
+#  - download_list(self, aid):
+#    given author ID, download a list of stories as metadata (metadata entries
+#    may be incomplete)
 class FFNet(object):
     hostname = "www.fanfiction.net"
     this_site = "ffnet"
@@ -194,6 +219,7 @@ body {{ font-family: sans-serif }}
         if contents:
             outfile.write(self._make_toc(toc))
         for n, t in enumerate(toc):
+            time.sleep(2)
             x = n + 1
             url = self.story_url.format(hostname=self.hostname,
                                         number=md['id'], chapter=x)
@@ -300,6 +326,20 @@ body {{ font-family: sans-serif }}
         info = {'author': author, 'authorid': number, 'site': self.this_site,
                 'author_url': url, 'author_dir': author_dir}
         return auth, fav, info
+
+    def get_tags_for(self, md):
+        return cat_to_tagset(md['category'])
+
+    def compare_mds(self, r, cr):
+        """Check two metadata entries to see if they 1. refer to the same story, 2. at
+        the same length. Used to check for updates."""
+        try:
+            if (r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or
+                r['updated'] != cr['updated']):  # noqa: E129
+                return False
+        except KeyError as e:  # if the metadata is incomplete
+            return False
+        return True
 
 class FictionPress(FFNet):
     hostname = "www.fictionpress.com"
