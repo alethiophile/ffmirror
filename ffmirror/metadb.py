@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text, func  # noqa: F401
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Table, DateTime, Boolean, Interval
 
-import datetime, os, sys
+import datetime, os, traceback
 
 db_file = 'db_test.sqlite'
 
@@ -87,10 +87,13 @@ class Story(Base):
     tags = relationship('Tag', secondary=story_tags_table,
                         backref='stories')
 
+    def get_metadata(self):
+        return {'author': self.author.name, 'site': self.archive,
+                'authorid': self.author.site_id, 'title': self.title,
+                'id': self.site_id}
+
     def unique_filename(self):
-        tmd = {'author': self.author.name, 'site': self.archive,
-               'authorid': self.author.site_id, 'title': self.title,
-               'id': self.site_id}
+        tmd = self.get_metadata()
         return story_file(tmd, with_id=True)
 
     def __repr__(self):
@@ -250,13 +253,7 @@ class DBMirror(object):
         if not silent:
             print("Downloading story '{}'".format(i.title))
         mod = sites[i.archive]
-        try:
-            md, toc = mod.download_metadata(i.site_id)
-        except Exception as e:
-            if not silent:
-                print("Download failed")
-                print(e)
-            return
+        md, toc = mod.download_metadata(i.site_id)
         if rfn is None:
             rfn = story_file(md, with_id=True)
         fn = os.path.join(self.mdir, rfn)
@@ -281,7 +278,12 @@ class DBMirror(object):
                                             ((Story.download_time == None) |  # noqa: E711,E501
                                              (Story.download_time <
                                               Story.updated))).all():
-                self.story_to_archive(i, silent=silent)
+                try:
+                    self.story_to_archive(i, silent=silent)
+                except Exception as e:
+                    if not silent:
+                        print("Download failed")
+                        traceback.print_exc()
         finally:
             ds.commit()
 
