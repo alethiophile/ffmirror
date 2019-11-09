@@ -1,6 +1,8 @@
 # Utilities common to the fanfic site scrapers
 
-import time, urllib.request, urllib.error, re, hashlib, os, json, urllib.parse
+import time, urllib.request, urllib.error, re, hashlib, os, json
+import urllib.parse, requests
+from bs4 import NavigableString
 
 def fold_string_indiscriminately(s, n=80):
     """Folds a string (insert line-breaks where appropriate, to format
@@ -53,7 +55,9 @@ class NetworkFetcher:
         self.delay = time_delay
 
     def do_fetch(self, url, timeout=30, opener=None):
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:21.0) Gecko/20100101 Firefox/21.0"})  # noqa: E501
+        headers = { "User-Agent":
+                    "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:21.0) "
+                    "Gecko/20100101 Firefox/21.0" }
         host = urllib.parse.urlsplit(url).netloc
         if host not in self.last_fetch:
             self.last_fetch[host] = 0
@@ -62,16 +66,10 @@ class NetworkFetcher:
             time.sleep(self.delay - wait)
         self.last_fetch[host] = time.time()
 
-        if opener is None:
-            open_func = urllib.request.urlopen
-        else:
-            open_func = opener.open
+        r = requests.get(url, headers=headers, timeout=timeout)
+        r.raise_for_status()
 
-        r = open_func(req, timeout=timeout)
-        if r.getcode() != 200:
-            raise Exception("non-200 return")
-
-        return r.read()
+        return r.content
 
 def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
                   cache_dir='/home/tom/.ffmirror_cache',
@@ -87,7 +85,7 @@ def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
                 with open(fn) as inp:
                     r = json.load(inp)
                 return FakeRequest(r['data'].encode())
-            except:
+            except Exception:
                 pass
     for i in range(tries):
         try:
@@ -117,3 +115,9 @@ def unsilly_import(name):
     for i in name.split('.')[1:]:
         mod = getattr(mod, i)
     return mod
+
+def rectify_strings(d):
+    for i in d:
+        if isinstance(d[i], NavigableString):
+            d[i] = str(d[i])
+    return d
