@@ -105,6 +105,7 @@ class Tag(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    date_added = Column(DateTime, default=datetime.datetime.now)
 
     def __repr__(self):
         return "<Tag '{}'>".format(self.name)
