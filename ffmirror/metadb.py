@@ -249,7 +249,7 @@ class DBMirror(object):
                 ao.fav_stories.append(so)
         ds.commit()
 
-    def story_to_archive(self, i, rfn=None, silent=False):
+    def story_to_archive(self, i, rfn=None, silent=False, commit=True):
         if not silent:
             print("Downloading story '{}'".format(i.title))
         mod = sites[i.archive]
@@ -269,6 +269,8 @@ class DBMirror(object):
             print('', end='\n')
         i.download_fn = rfn
         i.download_time = datetime.datetime.now()
+        if commit:
+            self.ds.commit()
 
     def archive_author(self, ao, silent=False):
         ds = self.ds
@@ -279,7 +281,7 @@ class DBMirror(object):
                                              (Story.download_time <
                                               Story.updated))).all():
                 try:
-                    self.story_to_archive(i, silent=silent)
+                    self.story_to_archive(i, silent=silent, commit=False)
                 except Exception as e:
                     if not silent:
                         print("Download failed")
