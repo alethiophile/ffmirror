@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text, func  # noqa: F401
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Table, DateTime, Boolean, Interval
 
-import datetime, os, traceback
+import datetime, os, traceback, sys
 
 db_file = 'db_test.sqlite'
 
@@ -283,7 +283,7 @@ class DBMirror(object):
                 except Exception as e:
                     if not silent:
                         print("Download failed")
-                        traceback.print_exc()
+                        traceback.print_exc(file=sys.stdout)
         finally:
             ds.commit()
 

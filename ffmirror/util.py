@@ -99,7 +99,12 @@ def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
             time.sleep(delay)
         else:
             if fn is not None:
-                o = { 'data': data.decode() }
+                try:
+                    o = { 'data': data.decode() }
+                except UnicodeDecodeError:
+                    print(url)
+                    print(repr(data))
+                    raise
                 with open(fn, 'w') as out:
                     json.dump(o, out)
                 return FakeRequest(o['data'].encode())
