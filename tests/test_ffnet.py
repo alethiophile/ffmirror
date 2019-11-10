@@ -14,7 +14,7 @@ class TestGetterModule(object):
         self.assertTrue(o is not None)
         aid = o.group('number')
         self._check_valid_aid(aid)
-        
+
         auth, faved = self.getter.download_list(aid)
         self.assertTrue(len(auth) > 0)
         self.assertTrue(len(faved) > 0)
@@ -47,7 +47,7 @@ class TestFFNet(TestGetterModule, unittest.TestCase):
     field_strs = ['title', 'summary', 'category', 'id', 'characters', 'source',
                   'author', 'authorid', 'genre', 'site']
     site_str = 'ffnet'
-    
+
     def _check_valid_aid(self, aid):
         self.assertTrue(aid.isdigit())
 
