@@ -1,15 +1,21 @@
 # Functions for maintaining a metadata-only mirror in an SQLAlchemy database.
 # This may be more feasible to duplicate in its entirety offline.
 
-from ffmirror import sites
+from __future__ import annotations
+
+from .core import site_modules
 from ffmirror.mirror import story_file
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
                             joinedload, exc)
+from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy import create_engine, text, func  # noqa: F401
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Table, DateTime, Boolean, Interval
+from sqlalchemy.engine.base import Engine
+
+from typing import Dict, Any, Union, Tuple, Optional, List
 
 import datetime, os, traceback, sys
 
@@ -45,20 +51,25 @@ class Author(Base):
 
     in_mirror = Column(Boolean, nullable=False, default=False)
 
-    stories_written = relationship('Story', backref='author')
-    fav_stories = relationship('Story', secondary=fav_stories_table,
-                               backref='users_faved')
-    fav_authors = relationship('Author', secondary=fav_authors_table,
-                               primaryjoin=id == fav_authors_table.c.author_id,
-                               secondaryjoin=id ==
-                               fav_authors_table.c.favauthor_id,
-                               backref='users_faved')
+    stories_written: RelationshipProperty[List[Story]] = relationship(
+        'Story', back_populates='author'
+    )
+    fav_stories: RelationshipProperty[List[Story]] = relationship(
+        'Story', secondary=fav_stories_table,
+        backref='users_faved'
+    )
+    fav_authors: RelationshipProperty[List[Author]] = relationship(
+        'Author', secondary=fav_authors_table,
+        primaryjoin=id == fav_authors_table.c.author_id,
+        secondaryjoin=id == fav_authors_table.c.favauthor_id,
+        backref='users_faved'
+    )
 
     def __repr__(self):
         return "<Author name='{}' id='{}'>".format(self.name, self.site_id)
 
     def source_site_url(self):
-        mod = sites[self.archive]
+        mod = site_modules[self.archive]
         md = { 'authorid': self.site_id }
         return mod.get_user_url(md)
 
@@ -84,19 +95,21 @@ class Story(Base):
 
     author_id = Column(Integer, ForeignKey('author.id'))
 
+    author = relationship('Author', back_populates='stories_written')
+
     tags = relationship('Tag', secondary=story_tags_table,
                         backref='stories')
 
-    def get_metadata(self):
+    def get_metadata(self) -> Dict[str, Any]:
         return {'author': self.author.name, 'site': self.archive,
                 'authorid': self.author.site_id, 'title': self.title,
                 'id': self.site_id}
 
-    def unique_filename(self):
+    def unique_filename(self) -> str:
         tmd = self.get_metadata()
         return story_file(tmd, with_id=True)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<Story '{}' by '{}' id='{}'>".format(
             self.title, self.author.name, self.site_id)
 
@@ -107,7 +120,7 @@ class Tag(Base):
     name = Column(String)
     date_added = Column(DateTime, default=datetime.datetime.now)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<Tag '{}'>".format(self.name)
 
 class Config(Base):
@@ -117,59 +130,59 @@ class Config(Base):
     name = Column(String)
     value = Column(String)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<Config '{}'='{}'>".format(self.name, self.value)
 
 class DBMirror(object):
-    def __init__(self, mdir, debug=False):
-        self.engine = None
-        self.Session = None
+    def __init__(self, mdir: str, debug: bool = False) -> None:
+        self.engine: Optional[Engine] = None
+        self.Session: Optional[sessionmaker] = None
         self.mdir = os.path.abspath(mdir)
         self.db_file = os.path.join(self.mdir, 'ffmeta.sqlite')
         self.debug = debug
         self._last_ao = None
 
-    def __enter__(self):
+    def __enter__(self) -> DBMirror:
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
         # any method which changes the DB will call ds.commit() on its own
         self.ds.close()
 
-    def connect(self):
+    def connect(self) -> None:
         self.engine = create_engine('sqlite:///{}'.format(self.db_file),
                                     echo=self.debug)
         self.Session = sessionmaker(bind=self.engine)
         self.ds = self.Session()
 
-    def create(self):
+    def create(self) -> None:
         Base.metadata.create_all(self.engine)
         co = Config(name='archive_dir', value=self.mdir)
         self.ds.add(co)
         self.ds.commit()
 
-    def get_story(self, archive, sid):
+    def get_story(self, archive: str, sid: str) -> Story:
         so_rv = (self.ds.query(Story)
                  .filter((Story.archive == archive) & (Story.site_id == sid)).
                  one_or_none())
         return so_rv
 
-    def get_author(self, archive, aid):
+    def get_author(self, archive: str, aid: str) -> Author:
         return (self.ds.query(Author)
                 .filter_by(archive=archive).filter_by(site_id=aid).
                 one_or_none())
 
-    def cache_load_author(self, ao):
+    def cache_load_author(self, ao: Author) -> Author:
         return (self.ds.query(Author)
                 .options(joinedload(Author.stories_written),
                          joinedload(Author.fav_stories).joinedload('author'))
                 .filter_by(id=ao.id).one_or_none())
 
-    def get_config(self, name):
+    def get_config(self, name: str) -> str:
         return self.ds.query(Config).filter_by(name=name).first().value
 
-    def _handle_tags_for(self, md):
+    def _handle_tags_for(self, md: Dict[str, Any]) -> None:
         """Takes a story metadata object, fetches its tags via its respective site
         module, then adds them to that story in the database. Tags that do not
         exist will be created. Requires that the story object already exist.
@@ -177,7 +190,7 @@ class DBMirror(object):
 
         """
         ds = self.ds
-        tagset = sites[md['site']].get_tags_for(md)
+        tagset = site_modules[md['site']].get_tags_for(md)
         so = self.get_story(md['site'], md['id'])
         for t in tagset:
             to = ds.query(Tag).filter_by(name=t).first()
@@ -187,11 +200,12 @@ class DBMirror(object):
             if so not in to.stories:
                 to.stories.append(so)
 
-    def _check_update(self, so, s):
+    def _check_update(self, so: Story, s: Dict[str, Any]) -> bool:
         return (so.words != s['words'] or so.chapters != s['chapters'] or
                 so.updated != datetime.datetime.fromtimestamp(s['updated']))
 
-    def _story_from_md(self, s, ao, eso=None):
+    def _story_from_md(self, s: Dict[str, Any], ao: Author,
+                       eso: Story = None):
         """Gets or creates a Story object from an ffmirror metadata dictionary. If it
         did not already exist, the object is added to the database session. If
         it did, it is updated to match the parameters. This method does not
@@ -216,7 +230,7 @@ class DBMirror(object):
             so.author = ao
         return so
 
-    def sync_author(self, ido):
+    def sync_author(self, ido: Union[Author, Tuple[str, str]]) -> None:
         ds = self.ds
         if isinstance(ido, Author):
             ao = ido
@@ -224,7 +238,7 @@ class DBMirror(object):
         else:
             archive, aid = ido
             ao = self.get_author(archive, aid)
-        mod = sites[archive]
+        mod = site_modules[archive]
         auth, fav, info = mod.download_list(aid)
         if not ao:
             ao = Author(name=info['author'], archive=archive, site_id=aid)
@@ -236,24 +250,25 @@ class DBMirror(object):
         si_d = {}
         for s in ao.stories_written + ao.fav_stories:
             si_d[s.site_id] = s
-        for s in auth:
-            so = self._story_from_md(s, ao, si_d.get(s['id']))
-        for s in fav:
-            ms = si_d.get(s['id'])
-            fao = ms.author if ms else self.get_author(archive, s['authorid'])
+        for sm in auth:
+            so = self._story_from_md(sm, ao, si_d.get(sm['id']))
+        for sm in fav:
+            ms = si_d.get(sm['id'])
+            fao = ms.author if ms else self.get_author(archive, sm['authorid'])
             if not fao:
-                fao = Author(name=s['author'], archive=archive,
-                             site_id=s['authorid'])
+                fao = Author(name=sm['author'], archive=archive,
+                             site_id=sm['authorid'])
                 ds.add(fao)
-            so = self._story_from_md(s, fao, ms)
+            so = self._story_from_md(sm, fao, ms)
             if so not in ao.fav_stories:
                 ao.fav_stories.append(so)
         ds.commit()
 
-    def story_to_archive(self, i, rfn=None, silent=False, commit=True):
+    def story_to_archive(self, i: Story, rfn: Optional[str] = None,
+                         silent: bool = False, commit: bool = True) -> None:
         if not silent:
             print("Downloading story '{}'".format(i.title))
-        mod = sites[i.archive]
+        mod = site_modules[i.archive]
         md, toc = mod.download_metadata(i.site_id)
         if rfn is None:
             rfn = story_file(md, with_id=True)
@@ -273,7 +288,7 @@ class DBMirror(object):
         if commit:
             self.ds.commit()
 
-    def archive_author(self, ao, silent=False):
+    def archive_author(self, ao: Author, silent: bool = False) -> None:
         ds = self.ds
         ao.in_mirror = True
         try:
@@ -290,7 +305,7 @@ class DBMirror(object):
         finally:
             ds.commit()
 
-    def run_update(self, silent=False):
+    def run_update(self, silent: bool = False) -> None:
         ds = self.ds
         aq = (ds.query(Author).filter(Author.in_mirror == True).  # noqa: E712
               order_by(Author.md_synced.asc()))
@@ -303,7 +318,7 @@ class DBMirror(object):
 
 # Temp functions for mirror migrate.
 
-def get_archive_id(dn):
+def get_archive_id(dn: str) -> Tuple[str, str]:
     rv = dn.rsplit('-', 2)
     return rv[-2], rv[-1]
 

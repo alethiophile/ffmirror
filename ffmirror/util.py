@@ -3,8 +3,9 @@
 import time, urllib.request, urllib.error, re, hashlib, os, json
 import urllib.parse, requests
 from bs4 import NavigableString  # type: ignore
+from typing import Dict, Optional, Any
 
-def fold_string_indiscriminately(s, n=80):
+def fold_string_indiscriminately(s: str, n: int = 80) -> str:
     """Folds a string (insert line-breaks where appropriate, to format
     on a display of no more than n columns) indiscriminately, meaning
     lose all existing whitespace formatting. This is the equivalent of
@@ -22,7 +23,7 @@ def fold_string_indiscriminately(s, n=80):
             cl = len(i)
     return rv[1:]  # remove extraneous leading space
 
-def fold_string_discriminately(s, n=80):
+def fold_string_discriminately(s: str, n: int = 80) -> str:
     """Folds a string discriminately, that is, preserving existing
     hard line breaks in the original. This is the equivalent of
     passing the string to fold -s."""
@@ -35,26 +36,26 @@ def fold_string_discriminately(s, n=80):
             rv += fold_string_indiscriminately(i, n) + '\n'
     return rv
 
-def make_filename(title):
+def make_filename(title: str) -> str:
     title = title.lower().replace(" ", "_")
     return re.sub("[^a-z0-9_.-]", "", title)
 
-def url_hash(url):
+def url_hash(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()
 
 class FakeRequest:
-    def __init__(self, d):
+    def __init__(self, d: bytes) -> None:
         self.data = d
 
-    def read(self):
+    def read(self) -> bytes:
         return self.data
 
 class NetworkFetcher:
-    def __init__(self, time_delay=2.0):
-        self.last_fetch = {}
+    def __init__(self, time_delay: float = 2.0):
+        self.last_fetch: Dict[str, float] = {}
         self.delay = time_delay
 
-    def do_fetch(self, url, timeout=30, opener=None):
+    def do_fetch(self, url: str, timeout: int = 30) -> bytes:
         headers = { "User-Agent":
                     "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:21.0) "
                     "Gecko/20100101 Firefox/21.0" }
@@ -71,9 +72,11 @@ class NetworkFetcher:
 
         return r.content
 
-def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
-                  cache_dir='/home/tom/.ffmirror_cache',
-                  fetcher=NetworkFetcher()):
+def urlopen_retry(url: str, tries: int = 3, delay: float = 1.0,
+                  timeout: int = 30,
+                  cache_dir: str = '/home/tom/.ffmirror_cache',
+                  fetcher: NetworkFetcher =
+                  NetworkFetcher()) -> Optional[FakeRequest]:
     """Open a URL, with retries on failure. Spoofs user agent to look like Firefox,
     since FFnet 403s the urllib UA."""
     fn = None
@@ -90,7 +93,7 @@ def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
     for i in range(tries):
         try:
             # r = open_func(req, timeout=timeout)
-            data = fetcher.do_fetch(url, timeout, opener)
+            data = fetcher.do_fetch(url, timeout)
         except urllib.error.URLError as e:
             if i == tries - 1:
                 raise e
@@ -107,16 +110,9 @@ def urlopen_retry(url, tries=3, delay=1, timeout=30, opener=None,
                     json.dump(o, out)
                 return FakeRequest(o['data'].encode())
             return FakeRequest(data)
+    return None
 
-def unsilly_import(name):
-    # For dotted imports, this _imports_ the module you want, but _returns_ the
-    # top-level package.
-    mod = __import__(name)
-    for i in name.split('.')[1:]:
-        mod = getattr(mod, i)
-    return mod
-
-def rectify_strings(d):
+def rectify_strings(d: Dict[str, Any]) -> Dict[str, Any]:
     for i in d:
         if isinstance(d[i], NavigableString):
             d[i] = str(d[i])

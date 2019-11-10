@@ -2,11 +2,14 @@
 
 import re
 from bs4 import BeautifulSoup  # type: ignore
+from bs4.element import Tag  # type: ignore
 # from urllib.parse import urljoin
 from datetime import datetime
 import html2text  # type: ignore
 
-from .util import urlopen_retry, rectify_strings, make_filename
+from typing import Dict, Any, Tuple, List, Set, Optional
+
+from ..util import urlopen_retry, rectify_strings, make_filename
 
 def parse_int(s):
     return int(s.replace(',', ''))
@@ -18,13 +21,13 @@ class AO3(object):
     user_url = "https://{hostname}/users/{aid}/works"
     user_bookmarks_url = "https://{hostname}/users/{aid}/bookmarks"
 
-    def get_user_url(self, md):
+    def get_user_url(self, md: Dict[str, Any]) -> str:
         return self.user_url.format(aid=md['authorid'], hostname=self.hostname)
 
-    def get_story_url(self, md):
+    def get_story_url(self, md: Dict[str, Any]) -> str:
         return self.story_url.format(number=md['id'], hostname=self.hostname)
 
-    def _parse_html_entry(self, i):
+    def _parse_html_entry(self, i: Tag) -> Optional[Dict[str, Any]]:
         rv = {}
         o = i.p
         if o is not None and 'message' in o['class']:
@@ -33,10 +36,14 @@ class AO3(object):
         rv['title'] = hh.a.string
         if 'series' in hh.a['href']:
             return None
-        rv['id'] = re.search(r'\d+', hh.a['href']).group(0)
+        o = re.search(r'\d+', hh.a['href'])
+        assert o is not None
+        rv['id'] = o.group(0)
         al = hh.find('a', rel='author')
         rv['author'] = al.string
-        rv['authorid'] = re.match(r'/users/(\w+)/', al['href']).group(1)
+        o = re.match(r'/users/(\w+)/', al['href'])
+        assert o is not None
+        rv['authorid'] = o.group(1)
         fandoms = [l.string for l in i.find('h5', class_='fandoms')
                    ('a', class_='tag')]
         rv['category'] = ' & '.join(fandoms)
@@ -78,10 +85,14 @@ class AO3(object):
             rv['reviews'] = 0
         return rectify_strings(rv)
 
-    def download_list(self, number):
+    def download_list(self, number: str) -> Tuple[List[Dict[str, Any]],
+                                                  List[Dict[str, Any]],
+                                                  Dict[str, Any]]:
         """Despite the name, "number" is just the string username from the URL."""
         url = self.user_url.format(hostname=self.hostname, aid=number)
-        soup = BeautifulSoup(urlopen_retry(url).read(), 'html5lib')
+        data = urlopen_retry(url)
+        assert data is not None
+        soup = BeautifulSoup(data.read(), 'html5lib')
 
         def download_with_pages(url):
             rv = []
@@ -135,7 +146,7 @@ class AO3(object):
                  'author_url': url, 'author_dir': author_dir }
         return auth, fav, info
 
-    def get_tags_for(self, md):
+    def get_tags_for(self, md: Dict[str, Any]) -> Set[str]:
         return md['tags']
 
     def download_metadata(self, number):

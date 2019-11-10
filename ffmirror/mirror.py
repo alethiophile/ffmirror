@@ -10,7 +10,8 @@
 import os, pickle, traceback, json
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
-from ffmirror import sites
+from .core import site_modules
+sites = site_modules
 
 def story_file(md, with_id=False):
     if with_id:
