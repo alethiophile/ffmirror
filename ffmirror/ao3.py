@@ -1,10 +1,10 @@
 # Site module for Archive Of Our Own.
 
 import re
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore
 # from urllib.parse import urljoin
 from datetime import datetime
-import html2text
+import html2text  # type: ignore
 
 from .util import urlopen_retry, rectify_strings, make_filename
 

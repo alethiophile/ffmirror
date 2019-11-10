@@ -2,7 +2,7 @@
 
 import time, urllib.request, urllib.error, re, hashlib, os, json
 import urllib.parse, requests
-from bs4 import NavigableString
+from bs4 import NavigableString  # type: ignore
 
 def fold_string_indiscriminately(s, n=80):
     """Folds a string (insert line-breaks where appropriate, to format

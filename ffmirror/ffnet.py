@@ -6,7 +6,7 @@
 # they're identical.
 
 import re, time
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore
 from bs4.element import Tag, NavigableString  # type: ignore
 
 from ffmirror.util import (make_filename, urlopen_retry,
