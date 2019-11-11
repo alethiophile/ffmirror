@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from .core import site_modules
-from ffmirror.mirror import story_file
+from .core import site_modules, StoryInfo, AuthorInfo
+# from ffmirror.mirror import story_file
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
@@ -68,10 +68,17 @@ class Author(Base):
     def __repr__(self):
         return "<Author name='{}' id='{}'>".format(self.name, self.site_id)
 
-    def source_site_url(self):
+    def get_metadata(self) -> AuthorInfo:
         mod = site_modules[self.archive]
-        md = { 'authorid': self.site_id }
-        return mod.get_user_url(md)
+        # md = { 'authorid': self.site_id }
+        authinf = AuthorInfo(name=self.name, id=self.site_id,
+                             url='', site=self.archive, dir='')
+        authinf.dir = authinf.get_mirror_dirname()
+        authinf.url = mod.get_user_url(authinf)
+        return authinf
+
+    def source_site_url(self):
+        return self.get_metadata().url
 
 class Story(Base):
     __tablename__ = 'story'
@@ -100,14 +107,28 @@ class Story(Base):
     tags = relationship('Tag', secondary=story_tags_table,
                         backref='stories')
 
-    def get_metadata(self) -> Dict[str, Any]:
-        return {'author': self.author.name, 'site': self.archive,
-                'authorid': self.author.site_id, 'title': self.title,
-                'id': self.site_id}
+    def get_metadata(self) -> StoryInfo:
+        site = self.archive
+        mod = site_modules[site]
+        authinf = self.author.get_metadata()
+        chapters = self.chapters or -1
+        words = self.words or -1
+        assert self.updated is not None
+        assert self.published is not None
+        rv = StoryInfo(
+            title=self.title, summary=self.summary, category=self.category,
+            id=self.site_id, reviews=-1, chapters=chapters, words=words,
+            characters=self.characters, source='', author=authinf,
+            genre=self.genre, site=self.archive, updated=self.updated,
+            published=self.published, complete=self.complete, story_url=''
+        )
+        rv.story_url = mod.get_story_url(rv)
+        return rv
 
     def unique_filename(self) -> str:
         tmd = self.get_metadata()
-        return story_file(tmd, with_id=True)
+        # return story_file(tmd, with_id=True)
+        return tmd.get_mirror_filename()
 
     def __repr__(self) -> str:
         return "<Story '{}' by '{}' id='{}'>".format(
@@ -182,7 +203,7 @@ class DBMirror(object):
     def get_config(self, name: str) -> str:
         return self.ds.query(Config).filter_by(name=name).first().value
 
-    def _handle_tags_for(self, md: Dict[str, Any]) -> None:
+    def _handle_tags_for(self, md: StoryInfo) -> None:
         """Takes a story metadata object, fetches its tags via its respective site
         module, then adds them to that story in the database. Tags that do not
         exist will be created. Requires that the story object already exist.
@@ -190,8 +211,8 @@ class DBMirror(object):
 
         """
         ds = self.ds
-        tagset = site_modules[md['site']].get_tags_for(md)
-        so = self.get_story(md['site'], md['id'])
+        tagset = site_modules[md.site].get_tags_for(md)
+        so = self.get_story(md.site, md.id)
         for t in tagset:
             to = ds.query(Tag).filter_by(name=t).first()
             if not to:
@@ -200,11 +221,11 @@ class DBMirror(object):
             if so not in to.stories:
                 to.stories.append(so)
 
-    def _check_update(self, so: Story, s: Dict[str, Any]) -> bool:
-        return (so.words != s['words'] or so.chapters != s['chapters'] or
-                so.updated != datetime.datetime.fromtimestamp(s['updated']))
+    def _check_update(self, so: Story, s: StoryInfo) -> bool:
+        return (so.words != s.words or so.chapters != s.chapters or
+                so.updated != s.updated)
 
-    def _story_from_md(self, s: Dict[str, Any], ao: Author,
+    def _story_from_md(self, s: StoryInfo, ao: Author,
                        eso: Story = None):
         """Gets or creates a Story object from an ffmirror metadata dictionary. If it
         did not already exist, the object is added to the database session. If
@@ -216,16 +237,21 @@ class DBMirror(object):
         if eso:
             so = eso
         else:
-            so = self.get_story(s['site'], s['id'])
+            so = self.get_story(s.site, s.id)
         if not so:
-            so = Story(archive=s['site'], site_id=s['id'])
+            so = Story(archive=s.site, site_id=s.id)
             ds.add(so)
         if self._check_update(so, s):
-            for di in ['title', 'words', 'chapters', 'category', 'summary',
-                       'characters', 'complete', 'genre']:
-                setattr(so, di, s[di])
-            for di in ['published', 'updated']:
-                setattr(so, di, datetime.datetime.fromtimestamp(s[di]))
+            so.title = s.title
+            so.words = s.words
+            so.chapters = s.chapters
+            so.category = s.category
+            so.summary = s.summary
+            so.characters = s.characters
+            so.complete = s.complete
+            so.genre = s.genre
+            so.published = s.published
+            so.updated = s.updated
             self._handle_tags_for(s)
             so.author = ao
         return so
@@ -241,7 +267,7 @@ class DBMirror(object):
         mod = site_modules[archive]
         auth, fav, info = mod.download_list(aid)
         if not ao:
-            ao = Author(name=info['author'], archive=archive, site_id=aid)
+            ao = Author(name=info.name, archive=archive, site_id=aid)
             ao.sync_int = datetime.timedelta(days=1)
             ds.add(ao)
         else:
@@ -251,13 +277,13 @@ class DBMirror(object):
         for s in ao.stories_written + ao.fav_stories:
             si_d[s.site_id] = s
         for sm in auth:
-            so = self._story_from_md(sm, ao, si_d.get(sm['id']))
+            so = self._story_from_md(sm, ao, si_d.get(sm.id))
         for sm in fav:
-            ms = si_d.get(sm['id'])
-            fao = ms.author if ms else self.get_author(archive, sm['authorid'])
+            ms = si_d.get(sm.id)
+            fao = ms.author if ms else self.get_author(archive, sm.author.id)
             if not fao:
-                fao = Author(name=sm['author'], archive=archive,
-                             site_id=sm['authorid'])
+                fao = Author(name=sm.author.name, archive=archive,
+                             site_id=sm.author.id)
                 ds.add(fao)
             so = self._story_from_md(sm, fao, ms)
             if so not in ao.fav_stories:
@@ -271,7 +297,7 @@ class DBMirror(object):
         mod = site_modules[i.archive]
         md, toc = mod.download_metadata(i.site_id)
         if rfn is None:
-            rfn = story_file(md, with_id=True)
+            rfn = md.get_mirror_filename()
         fn = os.path.join(self.mdir, rfn)
         os.makedirs(os.path.split(fn)[0], exist_ok=True)
 

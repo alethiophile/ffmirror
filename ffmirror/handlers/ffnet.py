@@ -7,10 +7,10 @@
 
 import re, time
 from bs4 import BeautifulSoup  # type: ignore
-from bs4.element import Tag, NavigableString  # type: ignore
+from bs4.element import Tag  # type: ignore
 from datetime import datetime
 
-from typing import Set, List, Dict, Any, Tuple, Optional, Callable, TextIO
+from typing import Set, List, Tuple, Optional, Callable, TextIO
 
 from ..util import (make_filename, urlopen_retry,
                     fold_string_indiscriminately)
@@ -53,17 +53,18 @@ class FFNet(DownloadModule):
     story_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/s/(?P<sid>\d+)/?(?P<chl>\d+)?/?")  # noqa: E501
     user_url_re = re.compile(r"https?://(?P<hostname>[^/]+)/u/(?P<aid>\d+)/?")
 
-    def get_user_url(self, md) -> str:
-        return self.user_url.format(number=md['authorid'],
+    def get_user_url(self, md: AuthorInfo) -> str:
+        return self.user_url.format(number=md.id,
                                     hostname=self.hostname)
 
-    def get_story_url(self, md) -> str:
-        return self.story_url.format(number=md['id'], chapter=1,
+    def get_story_url(self, md: StoryInfo) -> str:
+        return self.story_url.format(number=md.id, chapter=1,
                                      hostname=self.hostname)
 
     # Functions related to downloading stories
 
-    def _get_contents(self, soup: BeautifulSoup, sid: str) -> List[ChapterInfo]:
+    def _get_contents(self, soup: BeautifulSoup,
+                      sid: str) -> List[ChapterInfo]:
         """Given a BeautifulSoup of a story page, extract the contents list and
         return list of chapter titles."""
         se = soup.find("select", id="chap_select")
@@ -173,13 +174,6 @@ class FFNet(DownloadModule):
                                        authorid)
         authinf = AuthorInfo(name=author, id=authorid, url=author_url,
                              site=self.this_site, dir=author_dir)
-        # trv = {'title': title, 'summary': summary, 'category': category,
-        #        'id': sid, 'reviews': reviews, 'chapters': chapters,
-        #        'words': words, 'characters': characters, 'source': 'story',
-        #        'author': author, 'authorid': authorid, 'genre': genre, 'site':
-        #        self.this_site, 'updated': updated, 'published': published,
-        #        'complete': complete, 'story_url': story_url, 'author_url':
-        #        author_url, 'author_dir': author_dir}
         storyinf = StoryInfo(
             title=title, summary=summary, category=category, id=sid,
             reviews=reviews, chapters=chapters, words=words,
@@ -188,9 +182,6 @@ class FFNet(DownloadModule):
             published=datetime.fromtimestamp(published),
             complete=complete, story_url=story_url
         )
-        # for i in trv:
-        #     if type(trv[i]) == NavigableString:
-        #         trv[i] = str(trv[i])
         return storyinf
 
     def _make_toc(self, contents: List[ChapterInfo]) -> str:
@@ -225,10 +216,9 @@ class FFNet(DownloadModule):
         return md, toc
 
     def compile_story(self, md: StoryInfo, toc: List[ChapterInfo],
-                      outfile: TextIO,
-                      callback: Optional[Callable[[int, str], None]] = None,
-                      headers: bool = True,
-                      contents: bool = False) -> None:
+                      outfile: TextIO, contents: bool = False,
+                      callback: Optional[Callable[[int, str], None]] =
+                      None) -> None:
         """Given the output of download_metadata, download all chapters of a story and
         write them to outfile. Extra keyword arguments are ignored in order to
         facilitate calls. callback is called as each chapter is downloaded with
@@ -248,11 +238,10 @@ body {{ font-family: sans-serif }}
 </head>
 <!-- Fic ID: {id}
 """.format(title=md.title, id=md.id, author=md.author.name))
-        for k, v in sorted(md.__dict__.items()):
+        for k, v in sorted(md.to_dict().items()):
             outfile.write("{}: {}\n".format(k, v))
         outfile.write("-->\n<body>\n")
-        if headers:
-            outfile.write("<h1>{}</h1>\n".format(md.title))
+        outfile.write("<h1>{}</h1>\n".format(md.title))
         if contents:
             outfile.write(self._make_toc(toc))
         for n, t in enumerate(toc):
@@ -266,9 +255,8 @@ body {{ font-family: sans-serif }}
             assert r is not None
             data = r.read().decode()
             text = self._get_storytext(data)
-            if headers:
-                outfile.write("""<h2 id="ch{}" class="chapter">{}</h2>\n""".
-                              format(x, t.title))
+            outfile.write("""<h2 id="ch{}" class="chapter">{}</h2>\n""".
+                          format(x, t.title))
             text = fold_string_indiscriminately(text)
             outfile.write(text + "\n\n")
         outfile.write("</body>\n</html>\n")
@@ -326,16 +314,15 @@ body {{ font-family: sans-serif }}
                                           chapter=1)
         authinfo = AuthorInfo(name=author, id=authorid, url=author_url,
                               site=self.this_site, dir=author_dir)
-        # trv = {'title': title, 'category': category, 'id': sid,
-        #        'published': published, 'updated': updated, 'reviews': reviews,
-        #        'chapters': chapters, 'words': words, 'summary': summary,
-        #        'characters': chars, 'complete': complete, 'source': source,
-        #        'author': author, 'authorid': authorid, 'genre': genre,
-        #        'site': self.this_site, 'story_url': story_url,
-        #        'author_url': author_url, 'author_dir': author_dir }
-        # for i in trv:
-        #     if type(trv[i]) == NavigableString:
-        #         trv[i] = str(trv[i])
+        storyinfo = StoryInfo(
+            title=title, category=category, id=sid,
+            published=datetime.fromtimestamp(published),
+            updated=datetime.fromtimestamp(updated),
+            reviews=reviews, chapters=chapters, words=words, summary=summary,
+            characters=chars, complete=complete, source=source,
+            author=authinfo, genre=genre, site=self.this_site,
+            story_url=story_url
+        )
         return storyinfo
 
     def download_list(self, number: str) -> Tuple[List[StoryInfo],
@@ -359,29 +346,26 @@ body {{ font-family: sans-serif }}
                                        number)
         for i in soup.find_all('div', class_='z-list'):
             a = self._parse_entry(i)
-            if a['source'] == 'favorites':
+            if a.source == 'favorites':
                 fav.append(a)
-            elif a['source'] == 'authored':
-                a['author'] = author
-                a['authorid'] = number
-                a['author_dir'] = author_dir
-                a['author_url'] = url
+            elif a.source == 'authored':
+                a.author.name = author
+                a.author.id = number
+                a.author.dir = author_dir
+                a.author.url = url
                 auth.append(a)
-        info = {'author': author, 'authorid': number, 'site': self.this_site,
-                'author_url': url, 'author_dir': author_dir}
+        info = AuthorInfo(name=author, id=number, site=self.this_site,
+                          url=url, dir=author_dir)
         return auth, fav, info
 
     def get_tags_for(self, md: StoryInfo) -> Set[str]:
-        return cat_to_tagset(md['category'])
+        return cat_to_tagset(md.category)
 
-    def compare_mds(self, r: Dict[str, Any], cr: Dict[str, Any]) -> bool:
+    def compare_mds(self, r: StoryInfo, cr: StoryInfo) -> bool:
         """Check two metadata entries to see if they 1. refer to the same story, 2. at
         the same length. Used to check for updates."""
-        try:
-            if (r['words'] != cr['words'] or r['chapters'] != cr['chapters'] or
-                r['updated'] != cr['updated']):  # noqa: E129
-                return False
-        except KeyError as e:  # if the metadata is incomplete
+        if (r.words != cr.words or r.chapters != cr.chapters or
+            r.updated != cr.updated):  # noqa: E129
             return False
         return True
 

@@ -10,20 +10,23 @@
 import os, pickle, traceback, json
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
-from .core import site_modules
+from .core import site_modules, StoryInfo
+from typing import Optional, Dict, Any
+from datetime import datetime
 sites = site_modules
 
-def story_file(md, with_id=False):
+def story_file(md: StoryInfo, with_id: bool = False) -> str:
     if with_id:
-        return os.path.join("{}-{}-{}".format(util.make_filename(md['author']),
-                                              md['site'], md['authorid']),
-                            util.make_filename(
-                                "{}-{}.html".format(md['title'], md['id'])))
+        return os.path.join(
+            "{}-{}-{}".format(util.make_filename(md.author.name),
+                              md.site, md.author.id),
+            util.make_filename("{}-{}.html".format(md.title,
+                                                   md.id)))
     else:
-        return os.path.join(util.make_filename(md['author']),
-                            util.make_filename(md['title']) + '.html')
+        return os.path.join(util.make_filename(md.author.name),
+                            util.make_filename(md.title) + '.html')
 
-def read_from_file(name):
+def read_from_file(name: str) -> Optional[StoryInfo]:
     """Read a story metadata entry as returned by download_list out of
     a file. If file is nonexistent or unreadable, or metadata cannot
     be read, return None."""
@@ -33,9 +36,9 @@ def read_from_file(name):
     except IOError:
         return None
     reading = False
-    rv = {}
-    for line in f:
-        line = line.decode()
+    rv: Dict[str, Any] = {}
+    for bline in f:
+        line = bline.decode()
         # First (and presumably only) HTML comment in output file will be
         # metadata block
         if line[0:4] == "<!--" and "-->" not in line:
@@ -46,12 +49,12 @@ def read_from_file(name):
                 k, v = line.strip("\n").split(': ', 1)
             except ValueError:
                 break
-            try:
-                if k in ['category', 'author', 'title', 'id', 'authorid']:
-                    rv[k] = v
-                else:
-                    rv[k] = int(v)
-            except ValueError:
+            if k in ['published', 'updated']:
+                try:
+                    rv[k] = datetime.fromtimestamp(int(v))
+                except ValueError:
+                    rv[k] = datetime.fromisoformat(v)
+            else:
                 rv[k] = v
     if not reading:
         return None
@@ -60,7 +63,7 @@ def read_from_file(name):
     # Incomplete file, probably left over from an earlier interrupted DL
     if s != "</html>\n":
         return None
-    return rv
+    return StoryInfo.from_dict(rv)
 
 # Turns out the optimized-and-kind-of-painful version really is about twice as
 # fast as brute-force, which I think is worth it.
@@ -107,7 +110,7 @@ class FFMirror(object):
         self.mirror_dir = mirror_dir
         self.use_ids = use_ids
 
-    def check_update(self, r, n=None):
+    def check_update(self, r: StoryInfo, n: Optional[str] = None) -> bool:
         """Check a downloaded metadata entry r against local files. Return true if this
         entry needs redownloading. This will return false (thus failing) on
         colliding story titles if and only if use_ids is turned off. It is
@@ -119,8 +122,8 @@ class FFMirror(object):
         cr = read_from_file(n)
         if cr is None:
             return True
-        mod = sites[r['site']]
-        return not mod.compare_mds(r, cr)
+        # mod = sites[r.site]
+        return not r == cr
 
     def update_list(self, sl, callback=None):
         """This function takes a list of stories (as metadata entries) and downloads

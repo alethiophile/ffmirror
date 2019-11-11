@@ -7,67 +7,75 @@
 # separate module APIs.
 
 import sys, argparse, os, json
-import ffmirror.util as util
-import ffmirror.mirror as mirror
-import ffmirror.metadb as metadb
-from ffmirror import sites, urlres
+from . import util, mirror, metadb
+from .core import site_modules, url_res, DownloadModule
+from typing import Optional
+import click
 
 cur_mirror = mirror.FFMirror('.', use_ids=True)
 
-def parse_url(url):
+def parse_url(url: str) -> Optional[DownloadModule]:
     """Given a fanfiction URL (either story or author), this function will return
     the module that deals with the correct site. It does so by checking the
     regexes in urlres.
 
     """
-    for reg, mod in urlres:
+    for reg, mod in url_res:
         if reg.match(url):
             return mod
+    return None
 
-def download_story(url, **kwargs):
-    if kwargs['update']:
-        o = mirror.read_from_file(url)
+def download_story(url: str, silent: bool = False,
+                   contents: bool = True, update: bool = False,
+                   dry_run: bool = False,
+                   outfile: Optional[str] = None) -> None:
+    if update:
+        t = mirror.read_from_file(url)
+        if t is None:
+            print(f"Couldn't read file {url}", file=sys.stderr)
+            sys.exit(1)
         ufn = url
-        mod = sites[o['site']]
-        url = mod.get_story_url(o)
+        mod = site_modules[t.site]
+        url = mod.get_story_url(t)
     else:
-        mod = parse_url(url)
+        tv = parse_url(url)
+        assert tv is not None
+        mod = tv
     o = mod.story_url_re.match(url)
+    assert o is not None
     sid = o.group('sid')
     md, toc = mod.download_metadata(sid)
-    if not kwargs['silent']:
+    if not silent:
         print("Found story {}, {} chapters".
-              format(md['title'], md['chapters']))
-    if kwargs['dry_run']:
+              format(md.title, md.chapters))
+    if dry_run:
         print('\nMetadata:')
-        for i in md:
-            print("{}: {}".format(i, md[i]))
+        d = md.to_dict()
+        for i in d:
+            print("{}: {}".format(i, d[i]))
         print("\nContents:")
-        for i in toc:
-            print(i)
+        for c in toc:
+            print(c)
         return
-    if kwargs['update']:
+    if update:
         if not cur_mirror.check_update(md, ufn):
-            if not kwargs['silent']:
+            if not silent:
                 print("Nothing to do (up to date)")
             return
-    if kwargs['outfile']:
-        fn = kwargs['outfile']
+    if outfile:
+        fn = outfile
     else:
-        if kwargs['kindle']:
-            fn = util.make_filename(md['title']) + ".txt"
-        else:
-            fn = util.make_filename(md['title']) + ".html"
-    del kwargs['outfile']
-    with open(fn, 'w') as outfile:
+        fn = util.make_filename(md.title) + ".html"
+    with open(fn, 'w') as out_fo:
         def progress(n, t):
-            if not kwargs['silent']:
+            if not silent:
                 print("Got chapter {} of {}".format(n + 1, len(toc)), end='\r')
-        mod.compile_story(md, toc, outfile, callback=progress, **kwargs)
-        if not kwargs['silent']:
+        mod.compile_story(md, toc, out_fo, callback=progress,
+                          contents=contents)
+        if not silent:
             print("", end='\n')
 
-def run_dl():
+def run_dl() -> None:
     ap = argparse.ArgumentParser(
         description="Download a single story as a plain file")
     ap.add_argument("-s", "--silent", action="store_true",
@@ -77,12 +85,6 @@ def run_dl():
                     default="")
     g.add_argument("-c", "--contents", action="store_true",
                    help="Generate a table of contents", default=False)
-    g.add_argument("--no-headers", action="store_false",
-                   help="Suppress chapter headers", default=True,
-                   dest='headers')
-    ap.add_argument("-k", "--kindle", action="store_true",
-                    help="Format output for a Kindle (now deprecated, use ebook-convert)",  # noqa: E501
-                    default=False)
     ap.add_argument("-d", "--dry-run", action="store_true",
                     help="Dry run (no download, just parse metadata)",
                     default=False)
@@ -94,13 +96,16 @@ def run_dl():
     download_story(**args.__dict__)
 
 def download_list(url, ls=False, silent=False, getall=False, dry_run=False,
-                  write_favs=False, **kwargs):
+                  write_favs=False, **kwargs) -> None:
     mod = parse_url(url)
-    uid = mod.user_url_re.match(url).group('aid')
+    assert mod is not None
+    o = mod.user_url_re.match(url)
+    assert o is not None
+    uid = o.group('aid')
     auth, fav, info = mod.download_list(uid)
     if write_favs:
-        dn = "{}-{}-{}".format(util.make_filename(info['author']),
-                               info['site'], info['authorid'])
+        dn = "{}-{}-{}".format(util.make_filename(info.name),
+                               info.site, info.id)
         os.makedirs(dn, exist_ok=True)
         with open(os.path.join(dn, 'favorites.json'), 'w') as out:
             json.dump({'info': info, 'favs': fav}, out, sort_keys=True,
@@ -112,7 +117,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False,
         nsl = sl
     if not silent and len(auth) > 0:
         print("Got {} (of {}) stories from author {}".
-              format(len(nsl), len(sl), auth[0]['author']))
+              format(len(nsl), len(sl), info.name))
     if dry_run:
         for i in sl:
             print(i)
@@ -120,7 +125,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False,
     cur_mirror.update_tags(nsl)
     lsl = 0
 
-    def progress(i, n):
+    def progress(i, n) -> None:
         nonlocal lsl
         if not silent:
             if type(n) == tuple:
@@ -133,7 +138,7 @@ def download_list(url, ls=False, silent=False, getall=False, dry_run=False,
                     print("\n", end="")
     cur_mirror.update_list(nsl, callback=progress)
 
-def run_add():
+def run_add() -> None:
     ap = argparse.ArgumentParser(description="Add an author's corpus or favorites to a mirror, or update them")  # noqa: E501
     ap.add_argument("-s", "--silent", action="store_true",
                     help="Suppress running output", default=False)
@@ -149,7 +154,7 @@ def run_add():
     args = ap.parse_args()
     download_list(write_favs=True, **args.__dict__)
 
-def update_mirror(silent=False, author=None):
+def update_mirror(silent=False, author=None) -> None:
     m = cur_mirror.read_entries()
     for n, i in enumerate(sorted(m.keys())):
         if author is not None and author != i:
@@ -160,7 +165,7 @@ def update_mirror(silent=False, author=None):
         url = m[i].info['author_url']
         download_list(url, write_favs=True, silent=silent)
 
-def run_update():
+def run_update() -> None:
     ap = argparse.ArgumentParser(description="Update an entire mirror from the Web site")  # noqa: E501
     ap.add_argument("-s", "--silent", action="store_true",
                     help="Suppress running output", default=False)
@@ -169,28 +174,50 @@ def run_update():
     args = ap.parse_args()
     update_mirror(**args.__dict__)
 
-def do_cache():
+def do_cache() -> None:
     cur_mirror.make_cache()
 
-def run_db_op():
+@click.group()
+def run_db_op() -> None:
+    pass
+
+@run_db_op.command()
+@click.option("-a", "--author-dir", type=str, help="Author directory to update",
+              default=None)
+def update(author_dir: Optional[str]) -> None:
+    """Update the DB. If author-dir is given, update only that author."""
     mm = metadb.DBMirror('.')
     mm.connect()
-    if sys.argv[1] == 'update':
-        if len(sys.argv) > 2:
-            dn = sys.argv[2]
-            if dn.endswith('/'):
-                dn = dn[:-1]
-            site, aid = metadb.get_archive_id(dn)
-            ao = mm.get_author(site, aid)
-            mm.sync_author(ao)
-            mm.archive_author(ao)
-        else:
-            mm.run_update()
-    elif sys.argv[1] == 'add':
-        url = sys.argv[2]
-        mod = parse_url(url)
-        site = mod.this_site
-        aid = mod.user_url_re.match(url).group('aid')
-        mm.sync_author((site, aid))
+    if author_dir is not None:
+        dn = author_dir
+        if dn.endswith('/'):
+            dn = dn[:-1]
+        site, aid = metadb.get_archive_id(dn)
         ao = mm.get_author(site, aid)
+        mm.sync_author(ao)
         mm.archive_author(ao)
+    else:
+        mm.run_update()
+
+@run_db_op.command()
+@click.argument("url", type=str)
+def add(url: str):
+    """Add a new author to the DB."""
+    mm = metadb.DBMirror('.')
+    mm.connect()
+    mod = parse_url(url)
+    assert mod is not None
+    site = mod.this_site
+    o = mod.user_url_re.match(url)
+    assert o is not None
+    aid = o.group('aid')
+    mm.sync_author((site, aid))
+    ao = mm.get_author(site, aid)
+    mm.archive_author(ao)
+
+@run_db_op.command()
+def init():
+    """Initialize an ffmirror database in the current directory."""
+    mm = metadb.DBMirror('.')
+    mm.connect()
+    mm.create()
