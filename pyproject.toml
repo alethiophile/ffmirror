@@ -4,6 +4,8 @@ version = "0.3.0"
 description = "Local mirror for Internet fiction sites"
 authors = ["alethiophile <tomdicksonhunt@gmail.com>"]
 license = "MIT"
+readme = "README.rst"
+repository = "https://github.com/alethiophile/ffmirror"
 
 [tool.poetry.dependencies]
 python = "^3.6"
