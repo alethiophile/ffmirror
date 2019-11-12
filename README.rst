@@ -23,7 +23,7 @@ To create a mirror, enter an empty directory and issue:
 
   $ ffdb init
 
-This initialized the SQLite database that tracks metadata. You can now add
+This initializes the SQLite database that tracks metadata. You can now add
 authors by issuing:
 
 .. code:: bash
