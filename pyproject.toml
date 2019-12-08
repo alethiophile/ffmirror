@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ffmirror"
-version = "0.3.1"
+version = "0.3.2"
 description = "Local mirror for Internet fiction sites"
 authors = ["alethiophile <tomdicksonhunt@gmail.com>"]
 license = "MIT"
