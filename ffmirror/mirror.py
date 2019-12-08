@@ -10,10 +10,10 @@
 import os, pickle, traceback, json
 import ffmirror.util as util
 from ffmirror.simpletags import read_tags, write_tags
-from .core import site_modules, StoryInfo
+from .core import StoryInfo
 from typing import Optional, Dict, Any
 from datetime import datetime
-sites = site_modules
+from . import site_modules as sites
 
 def story_file(md: StoryInfo, with_id: bool = False) -> str:
     if with_id:

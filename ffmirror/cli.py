@@ -7,8 +7,8 @@
 # separate module APIs.
 
 import sys, argparse, os, json
-from . import util, mirror, metadb
-from .core import site_modules, url_res, DownloadModule
+from . import util, mirror, metadb, site_modules
+from .core import url_res, DownloadModule
 from typing import Optional
 import click
 

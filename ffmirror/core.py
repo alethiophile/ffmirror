@@ -131,5 +131,3 @@ class DownloadModule(metaclass=TypeRegister):
                                                List[StoryInfo],
                                                AuthorInfo]:
         ...
-
-from .handlers import *  # noqa: F401, F403

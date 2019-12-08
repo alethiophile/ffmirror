@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from .core import site_modules, StoryInfo, AuthorInfo
-# from ffmirror.mirror import story_file
+from . import site_modules
+from .core import StoryInfo, AuthorInfo
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
