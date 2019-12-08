@@ -180,7 +180,8 @@ class FFNet(DownloadModule):
             characters=characters, source='story', author=authinf, genre=genre,
             site=self.this_site, updated=datetime.fromtimestamp(updated),
             published=datetime.fromtimestamp(published),
-            complete=complete, story_url=story_url
+            complete=complete, story_url=story_url,
+            tags=cat_to_tagset(category)
         )
         return storyinf
 
@@ -321,7 +322,7 @@ body {{ font-family: sans-serif }}
             reviews=reviews, chapters=chapters, words=words, summary=summary,
             characters=chars, complete=complete, source=source,
             author=authinfo, genre=genre, site=self.this_site,
-            story_url=story_url
+            story_url=story_url, tags=cat_to_tagset(category)
         )
         return storyinfo
 
@@ -357,9 +358,6 @@ body {{ font-family: sans-serif }}
         info = AuthorInfo(name=author, id=number, site=self.this_site,
                           url=url, dir=author_dir)
         return auth, fav, info
-
-    def get_tags_for(self, md: StoryInfo) -> Set[str]:
-        return cat_to_tagset(md.category)
 
     def compare_mds(self, r: StoryInfo, cr: StoryInfo) -> bool:
         """Check two metadata entries to see if they 1. refer to the same story, 2. at

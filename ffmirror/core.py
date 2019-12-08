@@ -27,6 +27,7 @@ class StoryInfo:
     published: datetime.datetime
     complete: bool = attr.ib(converter=bool)
     story_url: str = attr.ib(converter=str)
+    tags: Set[str]
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> StoryInfo:
@@ -44,7 +45,7 @@ class StoryInfo:
             source=d.pop('source'), author=authinf, genre=d.pop('genre'),
             site=d.pop('site'), updated=d.pop('updated'),
             published=d.pop('published'), complete=d.pop('complete'),
-            story_url=d.pop('story_url')
+            story_url=d.pop('story_url'), tags=d.pop('tags')
         )
 
         if len(d) > 0:
@@ -129,10 +130,6 @@ class DownloadModule(metaclass=TypeRegister):
     def download_list(self, aid: str) -> Tuple[List[StoryInfo],
                                                List[StoryInfo],
                                                AuthorInfo]:
-        ...
-
-    @abstractmethod
-    def get_tags_for(self, story: StoryInfo) -> Set[str]:
         ...
 
 from .handlers import *  # noqa: F401, F403

@@ -15,7 +15,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Table, DateTime, Boolean, Interval
 from sqlalchemy.engine.base import Engine
 
-from typing import Dict, Any, Union, Tuple, Optional, List
+from typing import Union, Tuple, Optional, List, cast, Set
 
 import datetime, os, traceback, sys
 
@@ -105,7 +105,7 @@ class Story(Base):
     author = relationship('Author', back_populates='stories_written')
 
     tags = relationship('Tag', secondary=story_tags_table,
-                        backref='stories')
+                        backref='stories', uselist=True)
 
     def get_metadata(self) -> StoryInfo:
         site = self.archive
@@ -115,12 +115,14 @@ class Story(Base):
         words = self.words or -1
         assert self.updated is not None
         assert self.published is not None
+        ts = cast(Set[str], set(i.name for i in self.tags if i))
         rv = StoryInfo(
             title=self.title, summary=self.summary, category=self.category,
             id=self.site_id, reviews=-1, chapters=chapters, words=words,
             characters=self.characters, source='', author=authinf,
             genre=self.genre, site=self.archive, updated=self.updated,
-            published=self.published, complete=self.complete, story_url=''
+            published=self.published, complete=self.complete, story_url='',
+            tags=ts
         )
         rv.story_url = mod.get_story_url(rv)
         return rv
@@ -211,9 +213,8 @@ class DBMirror(object):
 
         """
         ds = self.ds
-        tagset = site_modules[md.site].get_tags_for(md)
         so = self.get_story(md.site, md.id)
-        for t in tagset:
+        for t in md.tags:
             to = ds.query(Tag).filter_by(name=t).first()
             if not to:
                 to = Tag(name=t)
@@ -324,7 +325,7 @@ class DBMirror(object):
                                               Story.updated))).all():
                 try:
                     self.story_to_archive(i, silent=silent, commit=False)
-                except Exception as e:
+                except Exception:
                     if not silent:
                         print("Download failed")
                         traceback.print_exc(file=sys.stdout)
