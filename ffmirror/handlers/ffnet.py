@@ -208,7 +208,7 @@ class FFNet(DownloadModule):
         """
         url = self.story_url.format(hostname=self.hostname, number=number,
                                     chapter=1)
-        r = urlopen_retry(url)
+        r = urlopen_retry(url, use_cloudscraper=True)
         assert r is not None
         data = r.read()
         soup = BeautifulSoup(data, 'html5lib')
@@ -252,7 +252,7 @@ body {{ font-family: sans-serif }}
                                         number=md.id, chapter=x)
             if callback:  # For printing progress as it runs.
                 callback(n, t.title)
-            r = urlopen_retry(url)
+            r = urlopen_retry(url, use_cloudscraper=True)
             assert r is not None
             data = r.read().decode()
             text = self._get_storytext(data)
@@ -289,7 +289,7 @@ body {{ font-family: sans-serif }}
         if type(cs) == Tag:
             chars = ''
         else:
-            o = re.match(r"\s*-\s*(.+?)\s*(-.*)?$", cs)
+            o = re.match(r"\s*-\s+(.+?)(\s+-.*)?$", cs)
             assert o is not None
             chars = o.group(1)
         if chars == 'Complete':
@@ -334,29 +334,34 @@ body {{ font-family: sans-serif }}
         faved). Each entry is a dictionary containing metadata.
 
         """
-        url = self.user_url.format(hostname=self.hostname, number=number)
-        r = urlopen_retry(url)
-        assert r is not None
-        page = r.read().decode()
-        soup = BeautifulSoup(page, 'html5lib')
-        author = (soup.find('div', id='content_wrapper_inner').span.string.
-                  strip())
-        auth: List[StoryInfo] = []
-        fav: List[StoryInfo] = []
-        author_dir = "{}-{}-{}".format(make_filename(author), self.this_site,
-                                       number)
-        for i in soup.find_all('div', class_='z-list'):
-            a = self._parse_entry(i)
-            if a.source == 'favorites':
-                fav.append(a)
-            elif a.source == 'authored':
-                a.author.name = author
-                a.author.id = number
-                a.author.dir = author_dir
-                a.author.url = url
-                auth.append(a)
-        info = AuthorInfo(name=author, id=number, site=self.this_site,
-                          url=url, dir=author_dir)
+        try:
+            url = self.user_url.format(hostname=self.hostname, number=number)
+            r = urlopen_retry(url, use_cloudscraper=True)
+            assert r is not None
+            page = r.read().decode()
+            soup = BeautifulSoup(page, 'html5lib')
+            author = (soup.find('div', id='content_wrapper_inner').span.string.
+                      strip())
+            auth: List[StoryInfo] = []
+            fav: List[StoryInfo] = []
+            author_dir = "{}-{}-{}".format(make_filename(author),
+                                           self.this_site,
+                                           number)
+            for i in soup.find_all('div', class_='z-list'):
+                a = self._parse_entry(i)
+                if a.source == 'favorites':
+                    fav.append(a)
+                elif a.source == 'authored':
+                    a.author.name = author
+                    a.author.id = number
+                    a.author.dir = author_dir
+                    a.author.url = url
+                    auth.append(a)
+            info = AuthorInfo(name=author, id=number, site=self.this_site,
+                              url=url, dir=author_dir)
+        except Exception:
+            print(url)
+            raise
         return auth, fav, info
 
     def compare_mds(self, r: StoryInfo, cr: StoryInfo) -> bool:

@@ -2,6 +2,10 @@
 
 import time, urllib.request, urllib.error, re, hashlib, os, json
 import urllib.parse, requests
+try:
+    import cloudscraper
+except Exception:
+    cloudscraper = None
 from bs4 import NavigableString  # type: ignore
 from typing import Dict, Optional, Any
 
@@ -55,10 +59,13 @@ class NetworkFetcher:
         self.last_fetch: Dict[str, float] = {}
         self.delay = time_delay
 
-    def do_fetch(self, url: str, timeout: int = 30) -> bytes:
+    def do_fetch(self, url: str, timeout: int = 30,
+                 use_cloudscraper: bool = False) -> bytes:
         headers = { "User-Agent":
-                    "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:21.0) "
-                    "Gecko/20100101 Firefox/21.0" }
+                    # "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:21.0) "
+                    # "Gecko/20100101 Firefox/21.0" }
+                    "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:76.0) "
+                    "Gecko/20100101 Firefox/76.0" }
         host = urllib.parse.urlsplit(url).netloc
         if host not in self.last_fetch:
             self.last_fetch[host] = 0
@@ -67,7 +74,20 @@ class NetworkFetcher:
             time.sleep(self.delay - wait)
         self.last_fetch[host] = time.time()
 
-        r = requests.get(url, headers=headers, timeout=timeout)
+        if use_cloudscraper:
+            if cloudscraper is None:
+                raise ValueError("cloudscraper not supported")
+            fetcher = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'firefox',
+                    'platform': 'windows',
+                    'mobile': False,
+                    'desktop': True,
+                })
+            headers = {}
+        else:
+            fetcher = requests
+        r = fetcher.get(url, headers=headers, timeout=timeout)
         r.raise_for_status()
 
         return r.content
@@ -76,7 +96,8 @@ def urlopen_retry(url: str, tries: int = 3, delay: float = 1.0,
                   timeout: int = 30,
                   cache_dir: str = '/home/tom/.ffmirror_cache',
                   fetcher: NetworkFetcher =
-                  NetworkFetcher()) -> Optional[FakeRequest]:
+                  NetworkFetcher(),
+                  use_cloudscraper: bool = False) -> Optional[FakeRequest]:
     """Open a URL, with retries on failure. Spoofs user agent to look like Firefox,
     since FFnet 403s the urllib UA."""
     fn = None
@@ -93,7 +114,8 @@ def urlopen_retry(url: str, tries: int = 3, delay: float = 1.0,
     for i in range(tries):
         try:
             # r = open_func(req, timeout=timeout)
-            data = fetcher.do_fetch(url, timeout)
+            data = fetcher.do_fetch(url, timeout,
+                                    use_cloudscraper=use_cloudscraper)
         except urllib.error.URLError as e:
             if i == tries - 1:
                 raise e

@@ -332,12 +332,15 @@ class DBMirror(object):
         finally:
             ds.commit()
 
-    def run_update(self, silent: bool = False) -> None:
+    def run_update(self, silent: bool = False,
+                   max_authors: Optional[int] = None) -> None:
         ds = self.ds
         aq = (ds.query(Author).filter(Author.in_mirror == True).  # noqa: E712
               order_by(Author.md_synced.asc()))
         ta = aq.count()
         for n, i in enumerate(aq.all()):
+            if max_authors is not None and n >= max_authors:
+                break
             if not silent:
                 print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
             self.sync_author(i)

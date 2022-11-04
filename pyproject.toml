@@ -17,6 +17,7 @@ html2text = "^2019.9"
 requests = "^2.22"
 click = "^7.0"
 attrs = "^19.3"
+cloudscraper = {version = "^1.2.50", optional = true}
 
 [tool.poetry.dev-dependencies]
 alembic = "^1.3"

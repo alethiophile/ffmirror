@@ -182,9 +182,13 @@ def run_db_op() -> None:
     pass
 
 @run_db_op.command()
-@click.option("-a", "--author-dir", type=str, help="Author directory to update",
+@click.option("-a", "--author-dir", type=str,
+              help="Author directory to update", default=None)
+@click.option("-m", "--max-authors", type=int,
+              help="Maximum number of authors to update "
+              "(to dodge Cloudflare rate-limiting)",
               default=None)
-def update(author_dir: Optional[str]) -> None:
+def update(author_dir: Optional[str], max_authors: Optional[int]) -> None:
     """Update the DB. If author-dir is given, update only that author."""
     mm = metadb.DBMirror('.')
     mm.connect()
@@ -197,7 +201,7 @@ def update(author_dir: Optional[str]) -> None:
         mm.sync_author(ao)
         mm.archive_author(ao)
     else:
-        mm.run_update()
+        mm.run_update(max_authors=max_authors)
 
 @run_db_op.command()
 @click.argument("url", type=str)
