@@ -382,7 +382,7 @@ def extract_chapters(stp: Path) -> Iterator[Tuple[str, str]]:
             if l.startswith('<h2 id="ch'):
                 if cur_chap is not None:
                     yield (cur_name, cur_chap)
-                o = re.match(r"<h2[^>]*>([^<]+)</h2>", l)
+                o = re.match(r"<h2[^>]*>([^<]*)</h2>", l)
                 cur_name = o.group(1)
                 cur_chap = ''
             elif l.startswith('</body>'):
@@ -392,6 +392,8 @@ def extract_chapters(stp: Path) -> Iterator[Tuple[str, str]]:
                 if cur_chap is not None:
                     cur_chap += l
 
+# Migrate a mirror from the single-file compile_story form to the chapters
+# form.
 def update_chapters(db_path: Path) -> None:
     m = DBMirror(str(db_path))
     with m:
