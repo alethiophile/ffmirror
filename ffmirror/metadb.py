@@ -407,7 +407,7 @@ def update_chapters(db_path: Path) -> None:
             dp = db_path / dbn
             dp.mkdir(exist_ok=True, parents=True)
             for n, t in enumerate(extract_chapters(fp)):
-                fn = "{n:04d}.html"
+                fn = f"{n:04d}.html"
                 (dp / fn).write_text(t[1])
                 c = Chapter(title=t[0], num=n)
                 s.all_chapters.append(c)
