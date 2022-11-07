@@ -10,6 +10,7 @@ import sys, argparse, os, json
 from . import util, mirror, metadb, site_modules
 from .core import url_res, DownloadModule
 from typing import Optional
+from pathlib import Path
 import click
 
 cur_mirror = mirror.FFMirror('.', use_ids=True)
@@ -225,3 +226,8 @@ def init():
     mm = metadb.DBMirror('.')
     mm.connect()
     mm.create()
+
+@run_db_op.command()
+def migrate():
+    """Migrate from old versions of the DB to the latest version."""
+    metadb.update_chapters(Path('.'))

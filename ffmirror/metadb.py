@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from . import site_modules
-from .core import StoryInfo, AuthorInfo
+from .core import StoryInfo, AuthorInfo, ChapterInfo
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
@@ -15,9 +15,11 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Table, DateTime, Boolean, Interval
 from sqlalchemy.engine.base import Engine
 
-from typing import Union, Tuple, Optional, List, cast, Set
+from pathlib import Path
 
-import datetime, os, traceback, sys
+from typing import Union, Tuple, Optional, List, cast, Set, Iterator
+
+import datetime, os, traceback, sys, re
 
 db_file = 'db_test.sqlite'
 
@@ -37,6 +39,10 @@ fav_authors_table = Table('fav_authors', Base.metadata,
 story_tags_table = Table('story_tags', Base.metadata,
                          Column('story_id', Integer, ForeignKey('story.id')),
                          Column('tag_id', Integer, ForeignKey('tag.id')))
+
+following_stories_table = Table('following_stories', Base.metadata,
+                                Column('story_id', Integer,
+                                       ForeignKey('story.id')))
 
 class Author(Base):
     __tablename__ = 'author'
@@ -107,6 +113,9 @@ class Story(Base):
     tags = relationship('Tag', secondary=story_tags_table,
                         backref='stories', uselist=True)
 
+    all_chapters = relationship('Chapter', back_populates='story',
+                                order_by='Chapter.num')
+
     def get_metadata(self) -> StoryInfo:
         site = self.archive
         mod = site_modules[site]
@@ -135,6 +144,16 @@ class Story(Base):
     def __repr__(self) -> str:
         return "<Story '{}' by '{}' id='{}'>".format(
             self.title, self.author.name, self.site_id)
+
+class Chapter(Base):
+    __tablename__ = 'chapter'
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    num = Column(Integer)
+    story_id = Column(Integer, ForeignKey('story.id'))
+
+    story = relationship('Story', back_populates='all_chapters')
 
 class Tag(Base):
     __tablename__ = 'tag'
@@ -291,27 +310,36 @@ class DBMirror(object):
                 ao.fav_stories.append(so)
         ds.commit()
 
-    def story_to_archive(self, i: Story, rfn: Optional[str] = None,
-                         silent: bool = False, commit: bool = True) -> None:
-        if not silent:
-            print("Downloading story '{}'".format(i.title))
-        mod = site_modules[i.archive]
-        md, toc = mod.download_metadata(i.site_id)
-        if rfn is None:
-            rfn = md.get_mirror_filename()
-        fn = os.path.join(self.mdir, rfn)
-        os.makedirs(os.path.split(fn)[0], exist_ok=True)
+    def _set_chapters(self, s: Story, toc: List[ChapterInfo]) -> None:
+        n_chapters = len(s.all_chapters)
+        for n, i in enumerate(toc):
+            if n < n_chapters:
+                s.all_chapters[n].title = i.title
+            else:
+                c = Chapter(title=i.title, num=n)
+                s.all_chapters.append(c)
 
-        def ocf(n, t):
+    def story_to_archive(self, st: Story, silent: bool = False,
+                         commit: bool = True) -> None:
+        if not silent:
+            print("Downloading story '{}'".format(st.title))
+        mod = site_modules[st.archive]
+        md, toc = mod.download_metadata(st.site_id)
+        # if rfn is None:
+        rfn = md.get_mirror_filename()
+        st_dir = Path(os.path.join(self.mdir, rfn))
+        st_dir.mkdir(exist_ok=True, parents=True)
+
+        for n, c in enumerate(toc):
             if not silent:
-                print("\r\x1b[2Kch.{}/{}: {}".format(n + 1,
-                                                     i.chapters, t), end='')
-        with open(fn, 'w') as out:
-            mod.compile_story(md, toc, out, contents=True, callback=ocf)
+                print(f"\r\x1b[2Kch.{n + 1}/{st.chapters}: {c.title}", end='')
+            chap_data = mod.download_chapter(c)
+            fn = f"{n:04d}.html"
+            (st_dir / fn).write_text(chap_data)
         if not silent:
             print('', end='\n')
-        i.download_fn = rfn
-        i.download_time = datetime.datetime.now()
+        st.download_fn = rfn
+        st.download_time = datetime.datetime.now()
         if commit:
             self.ds.commit()
 
@@ -345,6 +373,46 @@ class DBMirror(object):
                 print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
             self.sync_author(i)
             self.archive_author(i, silent=silent)
+
+def extract_chapters(stp: Path) -> Iterator[Tuple[str, str]]:
+    with stp.open('r') as stf:
+        cur_chap = None
+        cur_name = None
+        for l in stf:
+            if l.startswith('<h2 id="ch'):
+                if cur_chap is not None:
+                    yield (cur_name, cur_chap)
+                o = re.match(r"<h2[^>]*>([^<]+)</h2>", l)
+                cur_name = o.group(1)
+                cur_chap = ''
+            elif l.startswith('</body>'):
+                yield (cur_name, cur_chap)
+                return
+            else:
+                if cur_chap is not None:
+                    cur_chap += l
+
+def update_chapters(db_path: Path) -> None:
+    m = DBMirror(str(db_path))
+    with m:
+        tot = m.ds.query(Story).count()
+        for sn, s in enumerate(m.ds.query(Story).all()):
+            if not s.download_fn:
+                continue
+            fp = db_path / s.download_fn
+            if not fp.is_file():
+                continue
+            print(f"\r\x1b[2KStory {sn + 1}/{tot}: {s.title}", end='')
+            dbn = s.download_fn.rsplit('.', maxsplit=1)[0]
+            dp = db_path / dbn
+            dp.mkdir(exist_ok=True, parents=True)
+            for n, t in enumerate(extract_chapters(fp)):
+                fn = "{n:04d}.html"
+                (dp / fn).write_text(t[1])
+                c = Chapter(title=t[0], num=n)
+                s.all_chapters.append(c)
+            s.download_fn = dbn
+            m.ds.commit()
 
 # Temp functions for mirror migrate.
 

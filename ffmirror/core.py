@@ -7,7 +7,7 @@ from typing import (Dict, List, Tuple, Pattern, Any, TextIO, Callable, Set,
 from abc import ABCMeta, abstractmethod
 from os.path import join
 from .util import make_filename
-import attr, datetime
+import attr, datetime, time
 
 @attr.s(auto_attribs=True)
 class StoryInfo:
@@ -64,8 +64,8 @@ class StoryInfo:
 
     def get_mirror_filename(self) -> str:
         return join(self.author.get_mirror_dirname(),
-                    make_filename("{}-{}.html".format(self.title,
-                                                      self.id)))
+                    make_filename("{}-{}".format(self.title,
+                                                 self.id)))
 
 @attr.s(auto_attribs=True)
 class ChapterInfo:
@@ -119,11 +119,51 @@ class DownloadModule(metaclass=TypeRegister):
                                                    List[ChapterInfo]]:
         ...
 
-    @abstractmethod
-    def compile_story(self, story: StoryInfo, toc: List[ChapterInfo],
+    # This is a legacy function that downloads an entire story and writes it to
+    # a file. The modern mirror format stores chapters separately, so won't use
+    # this.
+    def compile_story(self, md: StoryInfo, toc: List[ChapterInfo],
                       outfile: TextIO, contents: bool = True,
                       callback: Optional[Callable[[int, str], None]]
                       = None) -> None:
+        """Given the output of download_metadata, download all chapters of a story and
+        write them to outfile. Extra keyword arguments are ignored in order to
+        facilitate calls. callback is called as each chapter is downloaded with
+        the chapter index and title; this should be a quick function to print
+        progress output or similar, since its completion blocks continuing the
+        download.
+
+        """
+        outfile.write("""<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="Author" content="{author}" />
+<title>{title}</title>
+<style type="text/css">
+body {{ font-family: sans-serif }}
+</style>
+</head>
+<!-- Fic ID: {id}
+""".format(title=md.title, id=md.id, author=md.author.name))
+        for k, v in sorted(md.to_dict().items()):
+            outfile.write("{}: {}\n".format(k, v))
+        outfile.write("-->\n<body>\n")
+        outfile.write("<h1>{}</h1>\n".format(md.title))
+        if contents:
+            outfile.write(self._make_toc(toc))
+        for n, t in enumerate(toc):
+            time.sleep(2)
+            x = n + 1
+            if callback:  # For printing progress as it runs.
+                callback(n, t.title)
+            text = self.download_chapter(t)
+            outfile.write("""<h2 id="ch{}" class="chapter">{}</h2>\n""".
+                          format(x, t.title))
+            outfile.write(text + "\n\n")
+        outfile.write("</body>\n</html>\n")
+
+    @abstractmethod
+    def download_chapter(self, chapter: ChapterInfo) -> str:
         ...
 
     @abstractmethod
