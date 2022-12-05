@@ -330,6 +330,8 @@ class DBMirror(object):
         st_dir = Path(os.path.join(self.mdir, rfn))
         st_dir.mkdir(exist_ok=True, parents=True)
 
+        self._set_chapters(st, toc)
+
         for n, c in enumerate(toc):
             if not silent:
                 print(f"\r\x1b[2Kch.{n + 1}/{st.chapters}: {c.title}", end='')
