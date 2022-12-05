@@ -119,9 +119,24 @@ class DownloadModule(metaclass=TypeRegister):
                                                    List[ChapterInfo]]:
         ...
 
+    @staticmethod
+    def _make_toc(contents: List[ChapterInfo]) -> str:
+        """Makes an HTML string table of contents to be concatenated into outstr, given
+        the return value of _get_contents (array of chapter names).
+
+        """
+        rs = "<h2>Contents</h2>\n<ol>\n"
+        for x in range(len(contents)):
+            n = x + 1
+            anc = "#ch{}".format(n)
+            rs += "<li><a href=\"{}\">{}</a></li>\n".format(anc,
+                                                            contents[x].title)
+        rs += "</ol>\n"
+        return rs
+
     # This is a legacy function that downloads an entire story and writes it to
     # a file. The modern mirror format stores chapters separately, so won't use
-    # this.
+    # this. However, this is still used by the `ffdl` script.
     def compile_story(self, md: StoryInfo, toc: List[ChapterInfo],
                       outfile: TextIO, contents: bool = True,
                       callback: Optional[Callable[[int, str], None]]

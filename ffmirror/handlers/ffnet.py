@@ -194,20 +194,6 @@ class FFNet(DownloadModule):
         )
         return storyinf
 
-    def _make_toc(self, contents: List[ChapterInfo]) -> str:
-        """Makes an HTML string table of contents to be concatenated into outstr, given
-        the return value of _get_contents (array of chapter names).
-
-        """
-        rs = "<h2>Contents</h2>\n<ol>\n"
-        for x in range(len(contents)):
-            n = x + 1
-            anc = "#ch{}".format(n)
-            rs += "<li><a href=\"{}\">{}</a></li>\n".format(anc,
-                                                            contents[x].title)
-        rs += "</ol>\n"
-        return rs
-
     def _get_html(self, url: str) -> str:
         driver = getattr(self, '_driver', None)
         if driver is None:
