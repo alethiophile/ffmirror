@@ -218,7 +218,6 @@ class FFNet(DownloadModule):
         # assert r is not None
         # data = r.read()
         data = self._get_html(url)
-        print(data)
         soup = BeautifulSoup(data, 'html5lib')
         md = self._get_metadata(soup)
         toc = self._get_contents(soup, number)
