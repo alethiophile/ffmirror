@@ -5,14 +5,20 @@
 # __main__ or the update functions in mirror. Also handles FictionPress, since
 # they're identical.
 
-import re, time
+import re
 from bs4 import BeautifulSoup  # type: ignore
 from bs4.element import Tag  # type: ignore
 from datetime import datetime
 
-from typing import Set, List, Tuple, Optional, Callable, TextIO
+from typing import Set, List, Tuple
 
-from ..util import (make_filename, urlopen_retry,
+try:
+    from selenium.webdriver.support.wait import WebDriverWait
+    from selenium.webdriver.common.by import By
+except ModuleNotFoundError:
+    WebDriverWait = None
+
+from ..util import (make_filename, urlopen_retry, get_webdriver,
                     fold_string_indiscriminately)
 from ..core import DownloadModule, StoryInfo, AuthorInfo, ChapterInfo
 
@@ -28,6 +34,9 @@ def cat_to_tagset(category: str) -> Set[str]:
         # Tag name is category name, in lowercase, minus any commas
         rv.add(i.lower().replace(",", ""))
     return rv
+
+def ffnet_visible(driver):
+    return driver.find_element(By.ID, "name_login")
 
 # A site module needs to implement the following:
 #  - get_user_url(self, md):
@@ -101,7 +110,7 @@ class FFNet(DownloadModule):
 
     def _get_storytext(self, d: str) -> str:
         """Takes a page of HTML, extracts the storytext, returns it."""
-        o = re.search("<div[^>]*id='storytext'[^>]*>", d)
+        o = re.search("<div[^>]*id=[\"']storytext[\"'][^>]*>", d)
         if o is None:
             raise Exception("Didn't find storytext")
         d = d[o.end():]
@@ -199,6 +208,17 @@ class FFNet(DownloadModule):
         rs += "</ol>\n"
         return rs
 
+    def _get_html(self, url: str) -> str:
+        driver = getattr(self, '_driver', None)
+        if driver is None:
+            driver = get_webdriver()
+            self._driver = driver
+        driver.get(url)
+        WebDriverWait(driver, timeout=10).until(ffnet_visible)
+        el = driver.find_element(By.TAG_NAME, "html")
+        r = el.get_attribute("outerHTML")
+        return r
+
     def download_metadata(self, number: str) -> Tuple[StoryInfo,
                                                       List[ChapterInfo]]:
         """This function takes a fic number and returns a pair: the first is a
@@ -208,18 +228,21 @@ class FFNet(DownloadModule):
         """
         url = self.story_url.format(hostname=self.hostname, number=number,
                                     chapter=1)
-        r = urlopen_retry(url, use_cloudscraper=True)
-        assert r is not None
-        data = r.read()
+        # r = urlopen_retry(url, use_cloudscraper=True)
+        # assert r is not None
+        # data = r.read()
+        data = self._get_html(url)
+        print(data)
         soup = BeautifulSoup(data, 'html5lib')
         md = self._get_metadata(soup)
         toc = self._get_contents(soup, number)
         return md, toc
 
     def download_chapter(self, chapter: ChapterInfo) -> str:
-        r = urlopen_retry(chapter.url, use_cloudscraper=True)
-        assert r is not None
-        data = r.read().decode()
+        # r = urlopen_retry(chapter.url, use_cloudscraper=True)
+        # assert r is not None
+        # data = r.read().decode()
+        data = self._get_html(chapter.url)
         text = self._get_storytext(data)
         text = fold_string_indiscriminately(text)
         return text
@@ -298,9 +321,10 @@ class FFNet(DownloadModule):
         """
         try:
             url = self.user_url.format(hostname=self.hostname, number=number)
-            r = urlopen_retry(url, use_cloudscraper=True)
-            assert r is not None
-            page = r.read().decode()
+            # r = urlopen_retry(url, use_cloudscraper=True)
+            # assert r is not None
+            # page = r.read().decode()
+            page = self._get_html(url)
             soup = BeautifulSoup(page, 'html5lib')
             author = (soup.find('div', id='content_wrapper_inner').span.string.
                       strip())

@@ -1,13 +1,21 @@
 # Utilities common to the fanfic site scrapers
 
 import time, urllib.request, urllib.error, re, hashlib, os, json
-import urllib.parse, requests
+import urllib.parse, requests, atexit, sys
 try:
     import cloudscraper
 except Exception:
     cloudscraper = None
 from bs4 import NavigableString  # type: ignore
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Callable
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    import undetected_chromedriver.v2 as uc
+    from selenium.webdriver.support.wait import WebDriverWait
+except Exception:
+    webdriver = None
 
 def fold_string_indiscriminately(s: str, n: int = 80) -> str:
     """Folds a string (insert line-breaks where appropriate, to format
@@ -139,3 +147,78 @@ def rectify_strings(d: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(d[i], NavigableString):
             d[i] = str(d[i])
     return d
+
+all_drivers = []
+hooks_set = False
+
+def set_hooks():
+    global hooks_set
+
+    def quit_drivers():
+        global all_drivers
+        for d in all_drivers:
+            try:
+                d.quit()
+            except Exception:
+                pass
+        all_drivers = []
+
+    def exh(t, v, tb):
+        quit_drivers()
+        return sys.__excepthook__(t, v, tb)
+
+    # ideally we might set excepthook here in order to handle non-normal exits;
+    # I leave it unset for easier debugging of issues involving the browser
+    # sys.excepthook = exh
+
+    atexit.register(quit_drivers)
+
+    hooks_set = True
+
+def get_webdriver():
+    """Get a webdriver. If Selenium is not available or no driver can be created,
+    return None; in this case, ffmirror will fall back on direct HTTP requests
+    (not all sites supported).
+
+    """
+    if webdriver is None:
+        return None
+
+    if not hooks_set:
+        set_hooks()
+
+    # TODO: try other browser options; check for failures
+    # options = webdriver.FirefoxOptions()
+    # driver = webdriver.Firefox(options=options)
+    driver = uc.Chrome()
+    all_drivers.append(driver)
+
+    return driver
+
+class BrowserFetcher:
+    def __init__(self, test: Any = None, fetch_delay: float = 2.0) -> None:
+        # test is a webdriver wait function; it takes a driver as its only
+        # argument, and returns True if the site has finished loading
+
+        # this is used to detect whether we've passed the Cloudflare check
+        if test is None:
+            self.test: Callable[[Any], bool] = lambda x: True
+        else:
+            self.test = test
+
+        self.fetch_delay = fetch_delay
+        self.last_fetch = 0.0
+        self.driver = get_webdriver()
+
+    def get_html(self, url: str) -> str:
+        now = time.time()
+        since_last = now - self.last_fetch
+        if since_last < self.fetch_delay:
+            time.sleep(self.fetch_delay - since_last)
+        self.last_fetch = time.time()
+
+        self.driver.get(url)
+        WebDriverWait(self.driver, timeout=10).until(self.test)
+        el = self.driver.find_element(By.TAG_NAME, "html")
+        r = el.get_attribute("outerHTML")
+        return r
