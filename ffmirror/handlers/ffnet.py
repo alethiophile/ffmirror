@@ -92,8 +92,8 @@ class FFNet(DownloadModule):
             rv.append(
                 ChapterInfo(title=val,
                             url=self.story_url.format(
-                                hostname=self.hostname, number=sid, chapter=n
-                            )))
+                                hostname=self.hostname, number=sid,
+                                chapter=n + 1)))
         return rv
 
     # Apparently souping the storytext can mess some things up when FFn uses
