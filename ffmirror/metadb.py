@@ -355,21 +355,18 @@ class DBMirror(object):
                                     (Story.download_time <
                                      Story.updated)))
         count = q.count()
-        try:
-            for n, i in enumerate(q.all()):
-                try:
-                    if progress is not None:
-                        progress(JobStatus(
-                            type='story', name=i.title, progress=n,
-                            total=count))
-                    self.story_to_archive(i, progress=progress, commit=False)
-                except Exception as e:
-                    if progress is not None:
-                        err_str = traceback.format_exc()
-                        progress(JobStatus(
-                            type='error', name=type(e).__name__, info=err_str))
-        finally:
-            ds.commit()
+        for n, i in enumerate(q.all()):
+            try:
+                if progress is not None:
+                    progress(JobStatus(
+                        type='story', name=i.title, progress=n,
+                        total=count))
+                self.story_to_archive(i, progress=progress)
+            except Exception as e:
+                if progress is not None:
+                    err_str = traceback.format_exc()
+                    progress(JobStatus(
+                        type='error', name=type(e).__name__, info=err_str))
 
     def run_update(self, progress: Optional[Callable[[JobStatus], None]] = None,
                    max_authors: Optional[int] = None) -> None:
@@ -381,7 +378,6 @@ class DBMirror(object):
             if max_authors is not None and n >= max_authors:
                 break
             if progress is not None:
-                # print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
                 t = max_authors if max_authors is not None else ta
                 progress(JobStatus(
                     type='author', name=i.name, progress=n + 1, total=t))
