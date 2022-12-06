@@ -384,7 +384,7 @@ class DBMirror(object):
                 # print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
                 t = max_authors if max_authors is not None else ta
                 progress(JobStatus(
-                    jobtype='author', name=i.name, progress=n + 1, total=t))
+                    type='author', name=i.name, progress=n + 1, total=t))
             self.sync_author(i)
             self.archive_author(i, progress=progress)
 

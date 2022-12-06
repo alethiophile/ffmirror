@@ -226,7 +226,7 @@ class BrowserFetcher:
 
 @define
 class JobStatus:
-    jobtype: str
+    type: str
     name: str
     progress: Optional[int] = None
     total: Optional[int] = None
