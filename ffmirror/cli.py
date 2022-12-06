@@ -184,13 +184,12 @@ def run_db_op() -> None:
     pass
 
 def job_progress(j: JobStatus) -> None:
-    print("\r\x1b[2K")
     if j.type == 'author':
         print(f"Syncing author {j.name} ({j.progress}/{j.total})")
     elif j.type == 'story':
         print(f"Downloading story '{j.name}'")
     elif j.type == 'chapter':
-        print(f"ch.{j.progress+1}/{j.total}: {j.name}", end='')
+        print(f"\r\x1b[2Kch.{j.progress+1}/{j.total}: {j.name}", end='')
         if j.progress + 1 == j.total:
             print()
     elif j.type == 'error':
