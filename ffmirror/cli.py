@@ -9,6 +9,7 @@
 import sys, argparse, os, json
 from . import util, mirror, metadb, site_modules
 from .core import url_res, DownloadModule
+from .util import JobStatus
 from typing import Optional
 from pathlib import Path
 import click
@@ -182,6 +183,20 @@ def do_cache() -> None:
 def run_db_op() -> None:
     pass
 
+def job_progress(j: JobStatus) -> None:
+    print("\r\x1b[2K")
+    if j.type == 'author':
+        print(f"Syncing author {j.name} ({j.progress}/{j.total})")
+    elif j.type == 'story':
+        print(f"Downloading story '{j.name}'")
+    elif j.type == 'chapter':
+        print(f"ch.{j.progress+1}/{j.total}: {j.name}", end='')
+        if j.progress + 1 == j.total:
+            print()
+    elif j.type == 'error':
+        print(f"Error: {j.name}")
+        print(j.info)
+
 @run_db_op.command()
 @click.option("-a", "--author-dir", type=str,
               help="Author directory to update", default=None)
@@ -189,10 +204,16 @@ def run_db_op() -> None:
               help="Maximum number of authors to update "
               "(to dodge Cloudflare rate-limiting)",
               default=None)
-def update(author_dir: Optional[str], max_authors: Optional[int]) -> None:
+@click.option("-s", "--silent", type=bool, is_flag=True, default=False,
+              help="Suppress progress display")
+def update(author_dir: Optional[str], max_authors: Optional[int],
+           silent: bool) -> None:
     """Update the DB. If author-dir is given, update only that author."""
     mm = metadb.DBMirror('.')
     mm.connect()
+
+    pf = None if silent else job_progress
+
     if author_dir is not None:
         dn = author_dir
         if dn.endswith('/'):
@@ -200,13 +221,15 @@ def update(author_dir: Optional[str], max_authors: Optional[int]) -> None:
         site, aid = metadb.get_archive_id(dn)
         ao = mm.get_author(site, aid)
         mm.sync_author(ao)
-        mm.archive_author(ao)
+        mm.archive_author(ao, progress=pf)
     else:
-        mm.run_update(max_authors=max_authors)
+        mm.run_update(max_authors=max_authors, progress=pf)
 
 @run_db_op.command()
+@click.option("-s", "--silent", type=bool, is_flag=True, default=False,
+              help="Suppress progress display")
 @click.argument("url", type=str)
-def add(url: str):
+def add(url: str, silent: bool):
     """Add a new author to the DB."""
     mm = metadb.DBMirror('.')
     mm.connect()
@@ -218,7 +241,8 @@ def add(url: str):
     aid = o.group('aid')
     mm.sync_author((site, aid))
     ao = mm.get_author(site, aid)
-    mm.archive_author(ao)
+    pf = None if silent else job_progress
+    mm.archive_author(ao, progress=pf)
 
 @run_db_op.command()
 def init():

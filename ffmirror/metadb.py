@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from . import site_modules
 from .core import StoryInfo, AuthorInfo, ChapterInfo
+from .util import JobStatus
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
@@ -17,7 +18,7 @@ from sqlalchemy.engine.base import Engine
 
 from pathlib import Path
 
-from typing import Union, Tuple, Optional, List, cast, Set, Iterator
+from typing import Union, Tuple, Optional, List, cast, Set, Iterator, Callable
 
 import datetime, os, traceback, sys, re
 
@@ -319,10 +320,9 @@ class DBMirror(object):
                 c = Chapter(title=i.title, num=n)
                 s.all_chapters.append(c)
 
-    def story_to_archive(self, st: Story, silent: bool = False,
+    def story_to_archive(self, st: Story,
+                         progress: Optional[Callable[[JobStatus], None]] = None,
                          commit: bool = True) -> None:
-        if not silent:
-            print("Downloading story '{}'".format(st.title))
         mod = site_modules[st.archive]
         md, toc = mod.download_metadata(st.site_id)
         # if rfn is None:
@@ -333,36 +333,45 @@ class DBMirror(object):
         self._set_chapters(st, toc)
 
         for n, c in enumerate(toc):
-            if not silent:
-                print(f"\r\x1b[2Kch.{n + 1}/{st.chapters}: {c.title}", end='')
+            if progress is not None:
+                progress(JobStatus(
+                    type='chapter', name=c.title, progress=n,
+                    total=st.chapters))
             chap_data = mod.download_chapter(c)
             fn = f"{n:04d}.html"
             (st_dir / fn).write_text(chap_data)
-        if not silent:
-            print('', end='\n')
         st.download_fn = rfn
         st.download_time = datetime.datetime.now()
         if commit:
             self.ds.commit()
 
-    def archive_author(self, ao: Author, silent: bool = False) -> None:
+    def archive_author(self, ao: Author,
+                       progress: Optional[Callable[[JobStatus], None]] = None
+                       ) -> None:
         ds = self.ds
         ao.in_mirror = True
+        q = ds.query(Story).filter((Story.author == ao) &
+                                   ((Story.download_time == None) |  # noqa: E711,E501
+                                    (Story.download_time <
+                                     Story.updated)))
+        count = q.count()
         try:
-            for i in ds.query(Story).filter((Story.author == ao) &
-                                            ((Story.download_time == None) |  # noqa: E711,E501
-                                             (Story.download_time <
-                                              Story.updated))).all():
+            for n, i in enumerate(q.all()):
                 try:
-                    self.story_to_archive(i, silent=silent, commit=False)
-                except Exception:
-                    if not silent:
-                        print("Download failed")
-                        traceback.print_exc(file=sys.stdout)
+                    if progress is not None:
+                        progress(JobStatus(
+                            type='story', name=i.title, progress=n,
+                            total=count))
+                    self.story_to_archive(i, progress=progress, commit=False)
+                except Exception as e:
+                    if progress is not None:
+                        err_str = traceback.format_exc()
+                        progress(JobStatus(
+                            type='error', name=type(e).__name__, info=err_str))
         finally:
             ds.commit()
 
-    def run_update(self, silent: bool = False,
+    def run_update(self, progress: Optional[Callable[[JobStatus], None]] = None,
                    max_authors: Optional[int] = None) -> None:
         ds = self.ds
         aq = (ds.query(Author).filter(Author.in_mirror == True).  # noqa: E712
@@ -371,10 +380,13 @@ class DBMirror(object):
         for n, i in enumerate(aq.all()):
             if max_authors is not None and n >= max_authors:
                 break
-            if not silent:
-                print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
+            if progress is not None:
+                # print("Syncing author {} ({}/{})".format(i.name, n + 1, ta))
+                t = max_authors if max_authors is not None else ta
+                progress(JobStatus(
+                    jobtype='author', name=i.name, progress=n + 1, total=t))
             self.sync_author(i)
-            self.archive_author(i, silent=silent)
+            self.archive_author(i, progress=progress)
 
 def extract_chapters(stp: Path) -> Iterator[Tuple[str, str]]:
     with stp.open('r') as stf:

@@ -7,6 +7,7 @@ try:
 except Exception:
     cloudscraper = None
 from bs4 import NavigableString  # type: ignore
+from attrs import define
 from typing import Dict, Optional, Any, Callable
 
 try:
@@ -222,3 +223,11 @@ class BrowserFetcher:
         el = self.driver.find_element(By.TAG_NAME, "html")
         r = el.get_attribute("outerHTML")
         return r
+
+@define
+class JobStatus:
+    jobtype: str
+    name: str
+    progress: Optional[int] = None
+    total: Optional[int] = None
+    info: Optional[str] = None
