@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time, urllib.request, urllib.error, re, hashlib, os, json
-import urllib.parse, requests, atexit, sys
+import urllib.parse, requests, atexit, sys, signal
 try:
     import cloudscraper
 except Exception:
@@ -159,6 +159,8 @@ def set_hooks():
 
     def quit_driver():
         global global_driver
+        if global_driver is None:
+            return
         try:
             global_driver.quit()
         except Exception:
@@ -195,6 +197,24 @@ def get_webdriver():
 
     return global_driver
 
+def restart_webdriver():
+    global global_driver
+    if global_driver is None:
+        return None
+
+    global_driver.quit()
+    global_driver = None
+
+    return get_webdriver()
+
+class TimeoutException(BaseException):
+    pass
+
+def sigalrm_handler(signum, frame):
+    raise TimeoutException()
+
+signal.signal(signal.SIGALRM, sigalrm_handler)
+
 class BrowserFetcher:
     """A class to handle using the browser driver to fetch pages. Contains a
     reference to the global driver, and imposes a global delay on all
@@ -206,6 +226,10 @@ class BrowserFetcher:
     """
     fetch_delay = 2.0
     last_fetch = 0.0
+    # Timeout used for waiting until the site displays
+    display_timeout = 10
+    # Timeout for handling buggy webdriver
+    restart_timeout = 20
 
     def __init__(self, test: Any = None) -> None:
         # test is a webdriver wait function; it takes a driver as its only
@@ -231,13 +255,24 @@ class BrowserFetcher:
     def update_last_fetch(cls) -> None:
         cls.last_fetch = time.time()
 
-    def get_html(self, url: str) -> str:
+    def get_html(self, url: str, tries: int = 3) -> str:
         self.wait_for_delay()
-        self.driver.get(url)
-        WebDriverWait(self.driver, timeout=10).until(self.test)
-        el = self.driver.find_element(By.TAG_NAME, "html")
-        r = el.get_attribute("outerHTML")
-        self.update_last_fetch()
+        while True:
+            signal.alarm(self.restart_timeout)
+            try:
+                self.driver.get(url)
+                WebDriverWait(self.driver, timeout=10).until(self.test)
+                el = self.driver.find_element(By.TAG_NAME, "html")
+                r = el.get_attribute("outerHTML")
+                self.update_last_fetch()
+            except TimeoutException:
+                self.driver = restart_webdriver()
+                tries -= 1
+                if tries <= 0:
+                    raise
+            else:
+                signal.alarm(0)
+                break
         return r
 
 @define
