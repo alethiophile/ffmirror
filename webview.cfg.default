@@ -1,0 +1,10 @@
+# Replace this with the full path to the FFMirror archive you want to
+# serve from.
+FF_DIR = '/path/to/ffmirror/archive'
+
+# This is the threshold beyond which a page breaks in the all-stories view.
+PAGE_THRES = 100
+
+# Replace this with a long secret value you generate at install
+# time. You can get a value with e.g. secrets.token_urlsafe(32).
+# SECRET_KEY = ''

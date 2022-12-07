@@ -9,10 +9,17 @@ from itertools import chain
 from operator import attrgetter
 
 from flask import (Flask, g, render_template, url_for, request, abort,
-                   send_from_directory, redirect, session)
-app = Flask('ffserve', instance_relative_config=True)
-app.config.from_pyfile('config.cfg')
+                   redirect, session)
+
+class DefaultConfig:
+    PAGE_THRES = 100
+
+app = Flask(__name__, instance_relative_config=True)
 app.secret_key = "dev"
+app.config.from_object(DefaultConfig)
+app.config.from_envvar("FFMIRROR_CONFIG")
+if 'FF_DIR' not in app.config:
+    raise Exception("Must provide FFMIRROR_CONFIG that sets FF_DIR")
 
 from . import tasks  # noqa: E402
 
