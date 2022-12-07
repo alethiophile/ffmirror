@@ -1,5 +1,7 @@
 # Utilities common to the fanfic site scrapers
 
+from __future__ import annotations
+
 import time, urllib.request, urllib.error, re, hashlib, os, json
 import urllib.parse, requests, atexit, sys
 try:
@@ -149,30 +151,28 @@ def rectify_strings(d: Dict[str, Any]) -> Dict[str, Any]:
             d[i] = str(d[i])
     return d
 
-all_drivers = []
+global_driver = None
 hooks_set = False
 
 def set_hooks():
     global hooks_set
 
-    def quit_drivers():
-        global all_drivers
-        for d in all_drivers:
-            try:
-                d.quit()
-            except Exception:
-                pass
-        all_drivers = []
+    def quit_driver():
+        global global_driver
+        try:
+            global_driver.quit()
+        except Exception:
+            pass
 
     def exh(t, v, tb):
-        quit_drivers()
+        quit_driver()
         return sys.__excepthook__(t, v, tb)
 
     # ideally we might set excepthook here in order to handle non-normal exits;
     # I leave it unset for easier debugging of issues involving the browser
     # sys.excepthook = exh
 
-    atexit.register(quit_drivers)
+    atexit.register(quit_driver)
 
     hooks_set = True
 
@@ -188,16 +188,26 @@ def get_webdriver():
     if not hooks_set:
         set_hooks()
 
-    # TODO: try other browser options; check for failures
-    # options = webdriver.FirefoxOptions()
-    # driver = webdriver.Firefox(options=options)
-    driver = uc.Chrome()
-    all_drivers.append(driver)
+    global global_driver
 
-    return driver
+    if global_driver is None:
+        global_driver = uc.Chrome()
+
+    return global_driver
 
 class BrowserFetcher:
-    def __init__(self, test: Any = None, fetch_delay: float = 2.0) -> None:
+    """A class to handle using the browser driver to fetch pages. Contains a
+    reference to the global driver, and imposes a global delay on all
+    fetches. The get_html() method simply downloads a page and returns the HTML
+    contents from the DOM; more sophisticated applications may manipulate the
+    driver attribute directly. Any manual driver manipulation must call
+    wait_for_delay() between fetches in order to respect the rate limit.
+
+    """
+    fetch_delay = 2.0
+    last_fetch = 0.0
+
+    def __init__(self, test: Any = None) -> None:
         # test is a webdriver wait function; it takes a driver as its only
         # argument, and returns True if the site has finished loading
 
@@ -207,21 +217,27 @@ class BrowserFetcher:
         else:
             self.test = test
 
-        self.fetch_delay = fetch_delay
-        self.last_fetch = 0.0
         self.driver = get_webdriver()
 
-    def get_html(self, url: str) -> str:
+    @classmethod
+    def wait_for_delay(cls) -> None:
         now = time.time()
-        since_last = now - self.last_fetch
-        if since_last < self.fetch_delay:
-            time.sleep(self.fetch_delay - since_last)
-        self.last_fetch = time.time()
+        since_last = now - cls.last_fetch
+        if since_last < cls.fetch_delay:
+            time.sleep(cls.fetch_delay - since_last)
+        cls.update_last_fetch()
 
+    @classmethod
+    def update_last_fetch(cls) -> None:
+        cls.last_fetch = time.time()
+
+    def get_html(self, url: str) -> str:
+        self.wait_for_delay()
         self.driver.get(url)
         WebDriverWait(self.driver, timeout=10).until(self.test)
         el = self.driver.find_element(By.TAG_NAME, "html")
         r = el.get_attribute("outerHTML")
+        self.update_last_fetch()
         return r
 
 @define

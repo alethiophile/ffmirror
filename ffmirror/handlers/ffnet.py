@@ -18,7 +18,7 @@ try:
 except ModuleNotFoundError:
     WebDriverWait = None
 
-from ..util import (make_filename, urlopen_retry, get_webdriver,
+from ..util import (make_filename, BrowserFetcher,
                     fold_string_indiscriminately)
 from ..core import DownloadModule, StoryInfo, AuthorInfo, ChapterInfo
 
@@ -194,16 +194,13 @@ class FFNet(DownloadModule):
         )
         return storyinf
 
-    def _get_html(self, url: str) -> str:
-        driver = getattr(self, '_driver', None)
-        if driver is None:
-            driver = get_webdriver()
-            self._driver = driver
-        driver.get(url)
-        WebDriverWait(driver, timeout=10).until(ffnet_visible)
-        el = driver.find_element(By.TAG_NAME, "html")
-        r = el.get_attribute("outerHTML")
-        return r
+    @property
+    def fetcher(self) -> BrowserFetcher:
+        try:
+            return self._fetcher
+        except AttributeError:
+            self._fetcher = BrowserFetcher(ffnet_visible)
+            return self._fetcher
 
     def download_metadata(self, number: str) -> Tuple[StoryInfo,
                                                       List[ChapterInfo]]:
@@ -214,20 +211,14 @@ class FFNet(DownloadModule):
         """
         url = self.story_url.format(hostname=self.hostname, number=number,
                                     chapter=1)
-        # r = urlopen_retry(url, use_cloudscraper=True)
-        # assert r is not None
-        # data = r.read()
-        data = self._get_html(url)
+        data = self.fetcher.get_html(url)
         soup = BeautifulSoup(data, 'html5lib')
         md = self._get_metadata(soup)
         toc = self._get_contents(soup, number)
         return md, toc
 
     def download_chapter(self, chapter: ChapterInfo) -> str:
-        # r = urlopen_retry(chapter.url, use_cloudscraper=True)
-        # assert r is not None
-        # data = r.read().decode()
-        data = self._get_html(chapter.url)
+        data = self.fetcher.get_html(chapter.url)
         text = self._get_storytext(data)
         text = fold_string_indiscriminately(text)
         return text
@@ -306,10 +297,7 @@ class FFNet(DownloadModule):
         """
         try:
             url = self.user_url.format(hostname=self.hostname, number=number)
-            # r = urlopen_retry(url, use_cloudscraper=True)
-            # assert r is not None
-            # page = r.read().decode()
-            page = self._get_html(url)
+            page = self.fetcher.get_html(url)
             soup = BeautifulSoup(page, 'html5lib')
             author = (soup.find('div', id='content_wrapper_inner').span.string.
                       strip())
