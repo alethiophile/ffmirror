@@ -69,6 +69,10 @@ def req_setup():
     g.mirror.connect()
     app.config['FAV_DIR'] = os.path.join(app.config['FF_DIR'], '.favs')
 
+@app.teardown_appcontext
+def req_teardown(ex):
+    g.mirror.ds.close()
+
 def sort_query(aq):
     al = []
     for auth, story in aq.all():
