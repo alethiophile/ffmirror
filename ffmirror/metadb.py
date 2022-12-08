@@ -204,6 +204,15 @@ class Config(Base):
     def __repr__(self) -> str:
         return "<Config '{}'='{}'>".format(self.name, self.value)
 
+class DownloadStatus(Base):
+    __tablename__ = 'dl_status'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(TimeStamp)
+    author_id = Column(Integer, ForeignKey('author.id'))
+    story_id = Column(Integer, ForeignKey('story.id'))
+    value = Column(String)
+
 class DBMirror(object):
     def __init__(self, mdir: str, debug: bool = False) -> None:
         self.engine: Optional[Engine] = None
@@ -305,7 +314,9 @@ class DBMirror(object):
             so.author = ao
         return so
 
-    def sync_author(self, ido: Union[Author, Tuple[str, str]]) -> None:
+    def sync_author(
+            self, ido: Union[Author, Tuple[str, str]],
+            progress: Optional[Callable[[JobStatus], None]] = None) -> None:
         ds = self.ds
         if isinstance(ido, Author):
             ao = ido
@@ -314,7 +325,15 @@ class DBMirror(object):
             archive, aid = ido
             ao = self.get_author(archive, aid)
         mod = site_modules[archive]
-        auth, fav, info = mod.download_list(aid)
+        try:
+            auth, fav, info = mod.download_list(aid)
+        except Exception:
+            err_str = traceback.format_exc()
+            if progress is not None:
+                progress(JobStatus(
+                    type='error', name=ao.name, progress=None, total=None,
+                    info=err_str))
+            raise
         if not ao:
             ao = Author(name=info.name, archive=archive, site_id=aid)
             ao.sync_int = datetime.timedelta(days=1)
@@ -348,9 +367,10 @@ class DBMirror(object):
                 c = Chapter(title=i.title, num=n)
                 s.all_chapters.append(c)
 
-    def story_to_archive(self, st: Story,
-                         progress: Optional[Callable[[JobStatus], None]] = None,
-                         commit: bool = True) -> None:
+    def story_to_archive(
+            self, st: Story,
+            progress: Optional[Callable[[JobStatus], None]] = None,
+            commit: bool = True) -> None:
         mod = site_modules[st.archive]
         md, toc = mod.download_metadata(st.site_id)
         # if rfn is None:
@@ -409,8 +429,14 @@ class DBMirror(object):
                 t = max_authors if max_authors is not None else ta
                 progress(JobStatus(
                     type='author', name=i.name, progress=n + 1, total=t))
-            self.sync_author(i)
-            self.archive_author(i, progress=progress)
+            try:
+                self.sync_author(i, progress=progress)
+                self.archive_author(i, progress=progress)
+            except Exception:
+                # we ignore exceptions here so as to continue with the sync
+                # attempt; any exception in the underlying function will be
+                # logged already via progress, so don't bother here
+                pass
 
 def extract_chapters(stp: Path) -> Iterator[Tuple[str, str]]:
     with stp.open('r') as stf:

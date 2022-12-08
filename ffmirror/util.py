@@ -9,7 +9,7 @@ try:
 except Exception:
     cloudscraper = None
 from bs4 import NavigableString  # type: ignore
-from attrs import define
+from attrs import define, asdict
 from typing import Dict, Optional, Any, Callable
 
 try:
@@ -282,3 +282,11 @@ class JobStatus:
     progress: Optional[int] = None
     total: Optional[int] = None
     info: Optional[str] = None
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self))
+
+    @classmethod
+    def from_json(cls, j: str) -> JobStatus:
+        d = json.loads(j)
+        return cls(**d)
