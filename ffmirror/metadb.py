@@ -10,6 +10,7 @@ from .util import JobStatus
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (sessionmaker, relationship,  # noqa: F401
                             joinedload, exc)
+from sqlalchemy import types
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy import create_engine, text, func  # noqa: F401
 from sqlalchemy import Column, Integer, String, ForeignKey
@@ -20,7 +21,8 @@ from pathlib import Path
 
 from typing import Union, Tuple, Optional, List, cast, Set, Iterator, Callable
 
-import datetime, os, traceback, sys, re
+import datetime, os, traceback, re
+utc = datetime.timezone.utc
 
 db_file = 'db_test.sqlite'
 
@@ -45,6 +47,31 @@ following_stories_table = Table('following_stories', Base.metadata,
                                 Column('story_id', Integer,
                                        ForeignKey('story.id')))
 
+class TimeStamp(types.TypeDecorator):
+    """A replacement for DateTime(timezone=True) for use with sqlite. This handles
+    the fact that the normal DateTime type doesn't use sqlite's TZ handling.
+
+    On store, TZ-aware datetimes are all converted to UTC. Naive datetimes will
+    raise an exception. This ensures that the TZ-naive representation stored in
+    sqlite will always be UTC.
+
+    On retrieve, naive datetimes are interpreted as UTC, and aware datetimes
+    with a UTC timestamp are returned.
+
+    """
+    impl = types.DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime.datetime, dialect):
+        if value.tzinfo is None:
+            raise ValueError("TimeStamp only supports TZ-aware datetimes")
+        return value.astimezone(utc)
+
+    def process_result_value(self, value: datetime.datetime, dialect):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=utc)
+        return value
+
 class Author(Base):
     __tablename__ = 'author'
 
@@ -53,7 +80,7 @@ class Author(Base):
     archive = Column(String, nullable=False)
     site_id = Column(String, nullable=False)
 
-    md_synced = Column(DateTime)
+    md_synced = Column(TimeStamp)
     sync_int = Column(Interval)
 
     in_mirror = Column(Boolean, nullable=False, default=False)
@@ -96,15 +123,15 @@ class Story(Base):
     site_id = Column(String, nullable=False)
     words = Column(Integer)
     chapters = Column(Integer)
-    published = Column(DateTime)
-    updated = Column(DateTime)
+    published = Column(TimeStamp)
+    updated = Column(TimeStamp)
     category = Column(String)
     summary = Column(String)
     characters = Column(String)
     complete = Column(Boolean)
     genre = Column(String)
 
-    download_time = Column(DateTime)  # null if never downloaded
+    download_time = Column(TimeStamp)  # null if never downloaded
     download_fn = Column(String)
 
     author_id = Column(Integer, ForeignKey('author.id'))
@@ -161,7 +188,8 @@ class Tag(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    date_added = Column(DateTime, default=datetime.datetime.now)
+    date_added = Column(TimeStamp,
+                        default=lambda: datetime.datetime.now(tz=utc))
 
     def __repr__(self) -> str:
         return "<Tag '{}'>".format(self.name)
@@ -293,7 +321,7 @@ class DBMirror(object):
             ds.add(ao)
         else:
             ao = self.cache_load_author(ao)
-        ao.md_synced = datetime.datetime.now()
+        ao.md_synced = datetime.datetime.now(tz=utc)
         si_d = {}
         for s in ao.stories_written + ao.fav_stories:
             si_d[s.site_id] = s
@@ -341,7 +369,7 @@ class DBMirror(object):
             fn = f"{n:04d}.html"
             (st_dir / fn).write_text(chap_data)
         st.download_fn = rfn
-        st.download_time = datetime.datetime.now()
+        st.download_time = datetime.datetime.now(tz=utc)
         if commit:
             self.ds.commit()
 
@@ -453,7 +481,7 @@ def populate_from_db(db, mm):
         rfn = os.path.join(mm.mdir, s['filename'])
         if not os.path.exists(rfn):
             raise ValueError("file doesn't exist: {}".format(rfn))
-        mt = datetime.datetime.fromtimestamp(os.stat(rfn).st_mtime)
+        mt = datetime.datetime.fromtimestamp(os.stat(rfn).st_mtime, utc)
         so.download_time = mt
         so.download_fn = s['filename']
     mm.ds.commit()
