@@ -8,7 +8,9 @@
     <a href="{{ url_for('all_stories') }}">All stories</a><br />
     <ul>
       {% for auth in alist %}
-        <li><a href="{{ url_for('favs', author=auth.id) }}">{{ auth.name }} ({{ auth.stories_written|length }})</a></li>
+        <li><a href="{{ url_for('favs', author=auth.id) }}">{{ auth.name }}</a><br />
+          <a href="{{ auth.source_site_url() }}">{{ auth.archive }}</a> — metadata updated {{ auth.md_synced.isoformat() }}<br />
+          {{ auth.stories_written|length }} stories</li>
       {% endfor %}
     </ul>
   </body>
